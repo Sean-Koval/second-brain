@@ -1037,6 +1037,102 @@ def issue_create(title, description, issue_type, priority, epic, blocks, labels,
     asyncio.run(_create())
 
 
+@issue.command("create-with-project")
+@click.argument("title")
+@click.option("--description", "-d", default="", help="Description for both epic and project")
+@click.option("--priority", "-p", type=int, default=2, help="Epic priority 0-4 (0=lowest, 4=highest)")
+@click.option("--labels", "-l", help="Comma-separated labels/tags for both")
+@click.option("--jira-project", "-j", help="Jira project key for the project")
+def issue_create_with_project(title, description, priority, labels, jira_project):
+    """Create an epic and linked Second Brain project together.
+
+    This is the recommended way to start a new initiative. Creates:
+    - A Beads epic for dependency tracking
+    - A Second Brain project for notes and time tracking
+    - Links them together with the same title and tags
+
+    Examples:
+        sb issue create-with-project "New Feature X" -d "Build feature X" -p 3 -l feature,backend
+        sb issue create-with-project "API Redesign" --labels api,refactor
+    """
+    from .integrations.beads_integration import get_beads_client
+    import asyncio
+
+    config = get_app_config()
+    client = get_beads_client(str(config.data_dir))
+
+    if not client:
+        console.print("[red]Error: Beads integration not available. Install with: uv pip install beads-mcp[/red]")
+        return
+
+    async def _create():
+        try:
+            label_list = labels.split(",") if labels else None
+
+            # Create epic
+            epic = await client.create_epic(
+                title=title,
+                description=description,
+                priority=priority,
+                labels=label_list or [],
+            )
+
+            priority_str = ["Lowest", "Low", "Medium", "High", "Highest"][priority]
+
+            console.print("[green]✓ Epic + Project created successfully![/green]")
+            console.print()
+            console.print("[bold]📋 Epic (Beads):[/bold]")
+            console.print(f"  ID: {epic.id}")
+            console.print(f"  Title: {epic.title}")
+            console.print(f"  Priority: {priority_str} ({priority})")
+            console.print(f"  Status: {epic.status}")
+            if label_list:
+                console.print(f"  Labels: {', '.join(label_list)}")
+
+            # Create project
+            session, engine = get_db_session()
+            try:
+                from .storage import StorageIndexer
+
+                indexer = StorageIndexer(session)
+                project = indexer.create_project(
+                    name=title,
+                    description=description,
+                    jira_project_key=jira_project,
+                    tags=label_list,
+                )
+
+                console.print()
+                console.print("[bold]📦 Project (Second Brain):[/bold]")
+                console.print(f"  ID: {project.id}")
+                console.print(f"  Name: {project.name}")
+                console.print(f"  Slug: {project.slug}")
+                console.print(f"  Markdown: {project.markdown_path}")
+                if jira_project:
+                    console.print(f"  Jira: {jira_project}")
+                if label_list:
+                    console.print(f"  Tags: {', '.join(label_list)}")
+
+                console.print()
+                console.print("[bold]🔗 Integration:[/bold]")
+                console.print(f"  Epic ID: {epic.id} ↔️ Project Slug: {project.slug}")
+
+                console.print()
+                console.print("[bold cyan]💡 Next Steps:[/bold cyan]")
+                console.print(f"  1. Create issues under epic: [dim]sb issue create \"Issue Title\" --epic {epic.id}[/dim]")
+                console.print(f"  2. Create tasks in project: [dim]sb task add \"Task Title\" --project {project.slug}[/dim]")
+                console.print(f"  3. Link issues to tasks: [dim]sb issue create \"Issue\" --with-task --project {project.slug}[/dim]")
+                console.print(f"  4. Add notes: [dim]sb note create \"Notes\" --project {project.slug}[/dim]")
+                console.print(f"  5. Track work: [dim]sb log add \"Work done\" --project {project.slug}[/dim]")
+            finally:
+                session.close()
+
+        except Exception as e:
+            console.print(f"[red]Error: {e}[/red]")
+
+    asyncio.run(_create())
+
+
 @issue.command("update")
 @click.argument("issue_id")
 @click.option("--title", "-t", help="New title")

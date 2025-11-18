@@ -71,9 +71,9 @@ Type `/sb-` to see all available Second Brain commands in autocomplete.
 
 ---
 
-## Available Commands (26 Total)
+## Available Commands (27 Total)
 
-### 🌟 Workflow Guides (6 commands)
+### 🌟 Workflow Guides (7 commands)
 
 Complete end-to-end workflows for common scenarios:
 
@@ -153,6 +153,24 @@ Fast execution patterns:
 - When to promote to issues
 
 Perfect for: Quick wins, small fixes (< 2 hours)
+
+---
+
+#### `/sb-epic-project-create` ⭐
+**Create epic + project together for new initiatives**
+
+The recommended way to start complex work:
+- Creates Beads epic for dependency tracking
+- Creates Second Brain project for notes/time tracking
+- Links them together automatically
+- Same title and tags for both
+
+Quick mode:
+```
+/sb-epic-project-create "New Feature" --priority 3 --labels feature,backend
+```
+
+Perfect for: Starting new features, complex initiatives requiring both coordination and detailed notes
 
 ---
 
@@ -645,6 +663,7 @@ This is normal! The agent needs to:
 | `/sb-bug-investigation` | Bug tracking | N/A (interactive guide) |
 | `/sb-weekly-summary` | Weekly reporting | N/A (generates summary) |
 | `/sb-quick-tasks` | Small task guide | N/A (interactive guide) |
+| `/sb-epic-project-create` | Create epic + project | `/sb-epic-project-create "Title" --priority 3 --labels tag1,tag2` |
 | **Query & Visualization** |||
 | `/sb-search-all` | Global search | `/sb-search-all "keyword"` |
 | `/sb-note-search` | Search notes | `/sb-note-search --tags research` |

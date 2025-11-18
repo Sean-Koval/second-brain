@@ -15,6 +15,16 @@ class EpicCreateInput(BaseModel):
     labels: Optional[List[str]] = Field(None, description="List of labels/tags")
 
 
+class EpicProjectCreateInput(BaseModel):
+    """Input for creating an epic and linked project together."""
+
+    title: str = Field(..., description="Epic and project title (will be used for both)")
+    description: Optional[str] = Field("", description="Description (will be used for both)")
+    priority: int = Field(2, description="Epic priority 0-4 (0=lowest, 4=highest)")
+    labels: Optional[List[str]] = Field(None, description="Labels/tags (will be used for both)")
+    jira_project_key: Optional[str] = Field(None, description="Jira project key for the project (optional)")
+
+
 class IssueCreateInput(BaseModel):
     """Input for creating an issue."""
 
@@ -625,3 +635,104 @@ def get_stats_tool(project_dir: Optional[str] = None):
             return f"Error getting stats: {str(e)}"
 
     return get_stats
+
+
+def create_epic_with_project_tool(project_dir: Optional[str] = None):
+    """Create an epic and linked project together tool."""
+
+    async def create_epic_with_project(input_data: EpicProjectCreateInput) -> str:
+        """
+        Create an epic and a linked Second Brain project in one operation.
+
+        This is the ideal workflow for starting a new initiative:
+        1. Creates an epic in Beads for dependency tracking and high-level coordination
+        2. Creates a Second Brain project for day-to-day notes and time tracking
+        3. Links them together automatically
+        4. Uses same title, description, and tags/labels for both
+
+        Perfect for:
+        - Starting new features or initiatives
+        - Organizing complex work that needs both dependency tracking and detailed notes
+        - Team collaboration where you need to track blockers AND capture implementation details
+
+        After creation, you can:
+        - Create issues under the epic with parent-child relationships
+        - Create tasks under the project and link them to issues
+        - Add notes to the project and tasks
+        - Track time and work logs in Second Brain
+        - Track dependencies and blockers in Beads
+        """
+        # Create the epic first
+        client = get_beads_client(project_dir)
+        if not client:
+            return "Error: Beads integration not available. Install with: uv pip install beads-mcp"
+
+        try:
+            # Create epic
+            epic = await client.create_epic(
+                title=input_data.title,
+                description=input_data.description,
+                priority=input_data.priority,
+                labels=input_data.labels or [],
+            )
+
+            priority_str = ["Lowest", "Low", "Medium", "High", "Highest"][input_data.priority]
+
+            result = "✅ Epic + Project created successfully!\n\n"
+            result += "📋 **Epic (Beads):**\n"
+            result += f"  ID: {epic.id}\n"
+            result += f"  Title: {epic.title}\n"
+            result += f"  Priority: {priority_str} ({input_data.priority})\n"
+            result += f"  Status: {epic.status}\n"
+
+            if input_data.labels:
+                result += f"  Labels: {', '.join(input_data.labels)}\n"
+
+            # Create project
+            from ..db import init_db, get_session
+            from ..config import get_config
+            from ..storage import StorageIndexer
+
+            config = get_config()
+            engine = init_db(str(config.db_path))
+            session = get_session(engine)
+
+            try:
+                indexer = StorageIndexer(session)
+
+                project = indexer.create_project(
+                    name=input_data.title,
+                    description=input_data.description,
+                    jira_project_key=input_data.jira_project_key,
+                    tags=input_data.labels,
+                )
+
+                result += f"\n📦 **Project (Second Brain):**\n"
+                result += f"  ID: {project.id}\n"
+                result += f"  Name: {project.name}\n"
+                result += f"  Slug: {project.slug}\n"
+                result += f"  Markdown: {project.markdown_path}\n"
+
+                if input_data.jira_project_key:
+                    result += f"  Jira: {input_data.jira_project_key}\n"
+
+                if input_data.labels:
+                    result += f"  Tags: {', '.join(input_data.labels)}\n"
+
+                result += f"\n🔗 **Integration:**\n"
+                result += f"Epic ID: {epic.id} ↔️ Project Slug: {project.slug}\n"
+                result += f"\n💡 **Next Steps:**\n"
+                result += f"1. Create issues under epic: sb issue create \"Issue Title\" --parent-epic {epic.id}\n"
+                result += f"2. Create tasks in project: sb task add \"Task Title\" --project {project.slug}\n"
+                result += f"3. Link issues to tasks: sb issue create \"Issue\" --with-task --project {project.slug}\n"
+                result += f"4. Add notes: sb note create \"Notes\" --project {project.slug}\n"
+                result += f"5. Track work: sb log add \"Work done\" --project {project.slug}\n"
+
+                return result
+            finally:
+                session.close()
+
+        except Exception as e:
+            return f"Error creating epic and project: {str(e)}"
+
+    return create_epic_with_project

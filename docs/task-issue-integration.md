@@ -46,6 +46,55 @@ Epic (Beads)
 
 ## Linking Strategies
 
+### Strategy 0: Epic + Project Together (Recommended) ⭐
+
+**NEW!** Start with both systems linked from the beginning:
+
+```bash
+# 1. Create epic + project in one command
+sb issue create-with-project "Payment Integration" \
+  --description "Integrate Stripe for payment processing" \
+  --priority 4 \
+  --labels backend,payments
+
+# Creates:
+# - Epic in Beads (epic-042)
+# - Project in Second Brain (payment-integration)
+# - Automatically linked together
+
+# 2. Create issues under the epic with linked tasks
+sb issue create "Stripe API Integration" \
+  --epic epic-042 \
+  --with-task \
+  --project payment-integration
+
+sb issue create "Payment UI" \
+  --epic epic-042 \
+  --with-task \
+  --project payment-integration
+
+# 3. Add dependencies
+sb issue add-dependency UI_ISSUE_ID API_ISSUE_ID --type blocks
+
+# 4. Work on tasks, add notes
+sb note create "Stripe Integration Notes" --project payment-integration
+sb log add "Implemented webhook handler" --task-id TASK_ID --time 120
+```
+
+**When to use:**
+- **Starting new complex features** - Creates both systems from the start
+- **Team projects** - Everyone knows the epic ID and project slug
+- **Multi-component work** - Needs both dependency tracking and detailed notes
+- **Best practice** - Recommended default for any non-trivial work
+
+**Benefits:**
+- ✅ One command creates everything
+- ✅ Same title and tags for consistency
+- ✅ Clear integration from day one
+- ✅ Ready for both notes AND dependency tracking
+
+---
+
 ### Strategy 1: Issue-First
 
 Start with dependency planning in Beads, then create linked tasks:

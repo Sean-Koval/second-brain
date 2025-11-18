@@ -698,6 +698,76 @@ Daily Work Logs:
 
 Issue commands integrate with Beads for epic and dependency tracking. See [Task-Issue Integration](task-issue-integration.md) for detailed guide.
 
+### `sb issue create-with-project` ⭐
+
+**RECOMMENDED**: Create an epic and linked Second Brain project together in one command.
+
+This is the ideal way to start a new feature or complex initiative. It creates:
+- A Beads epic for dependency tracking and high-level coordination
+- A Second Brain project for day-to-day notes, tasks, and time tracking
+- Links them together with the same title and tags
+
+**Syntax:**
+```bash
+sb issue create-with-project TITLE [OPTIONS]
+```
+
+**Arguments:**
+- `TITLE` - Title for both epic and project (required)
+
+**Options:**
+- `-d, --description TEXT` - Description for both epic and project
+- `-p, --priority INTEGER` - Epic priority 0-4 (0=lowest, 4=highest, default: 2)
+- `-l, --labels TEXT` - Comma-separated labels/tags for both
+- `-j, --jira-project TEXT` - Jira project key for the project (optional)
+
+**Examples:**
+```bash
+# Simple usage
+sb issue create-with-project "Mobile App Redesign"
+
+# With full options
+sb issue create-with-project "API v2 Migration" \
+  --description "Migrate all endpoints to v2" \
+  --priority 4 \
+  --labels backend,migration,api \
+  --jira-project APIV2
+
+# Then create issues under the epic
+sb issue create "Migrate auth endpoints" \
+  --epic EPIC-ID \
+  --with-task \
+  --project api-v2-migration
+```
+
+**Output:**
+```
+✓ Epic + Project created successfully!
+
+📋 Epic (Beads):
+  ID: epic-042
+  Title: API v2 Migration
+  Priority: Highest (4)
+  Status: open
+
+📦 Project (Second Brain):
+  ID: 15
+  Name: API v2 Migration
+  Slug: api-v2-migration
+  Markdown: ~/.second-brain/data/projects/api-v2-migration.md
+
+🔗 Integration:
+  Epic ID: epic-042 ↔️ Project Slug: api-v2-migration
+
+💡 Next Steps:
+  1. Create issues under epic
+  2. Create tasks in project
+  3. Link issues to tasks
+  4. Add notes and track work
+```
+
+---
+
 ### `sb issue create`
 
 Create a new Beads issue with optional Second Brain task linkage.

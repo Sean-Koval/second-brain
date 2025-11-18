@@ -168,6 +168,7 @@ See: [Architecture - Git Sync](architecture.md#git-integration-strategy)
 - **Notes**: `sb note create`, `sb note add`, `sb note list`, `sb note search`
 - **Reports**: `sb report work`
 - **Issues**: `sb issue create`, `sb issue list`, `sb issue ready`
+- **Epic + Project**: `sb issue create-with-project` - Create both together (recommended!)
 - **Jira**: `sb jira sync` *(optional)*
 
 Full reference: [CLI Reference](cli-reference.md)
@@ -179,6 +180,7 @@ Full reference: [CLI Reference](cli-reference.md)
 - `create_project`, `create_task` - Create projects and tasks
 - `create_note`, `append_to_note`, `update_note` - Note management
 - `create_issue`, `create_epic` - Create Beads issues/epics
+- `create_epic_with_project` - Create epic + project together (recommended!)
 - `update_task`, `update_issue` - Update entities
 
 **Query Operations:**

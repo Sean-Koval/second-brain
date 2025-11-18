@@ -209,6 +209,31 @@ Covers:
 
 ---
 
+#### `/sb-epic-project-create` ⭐
+**Create epic + project together for new initiatives**
+
+The **recommended way** to start complex work that needs both:
+- **Beads epic** for dependency tracking and high-level coordination
+- **Second Brain project** for day-to-day notes, tasks, and time tracking
+
+Automatically links them together with the same title and tags.
+
+Perfect for:
+- Starting new features or major initiatives
+- Complex work requiring dependency management AND detailed notes
+- Team collaboration projects
+- Work spanning multiple tasks/issues
+
+Covers:
+- Creating both epic and project in one command
+- Linking strategy
+- Creating issues under the epic
+- Creating tasks in the project
+- Adding notes and tracking work
+- Full workflow from initialization to completion
+
+---
+
 ### 🔍 Query & Visualization Commands
 
 These commands help you **find, explore, and visualize** your Second Brain content:
@@ -775,6 +800,7 @@ EOF
 | `/sb-bug-investigation` | Bug investigation & postmortem | Complex bugs, production incidents |
 | `/sb-weekly-summary` | Weekly summary & reporting | Friday wrap-up, team updates |
 | `/sb-quick-tasks` | Small task management | Quick wins, small fixes |
+| `/sb-epic-project-create` ⭐ | Create epic + project together | Starting new features, complex initiatives |
 
 ### Query & Visualization Commands
 

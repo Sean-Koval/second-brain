@@ -24,6 +24,7 @@ from .tools.transcripts import (
 )
 from .tools.epics import (
     create_epic_tool,
+    create_epic_with_project_tool,
     create_issue_tool,
     update_issue_tool,
     close_issue_tool,
@@ -572,6 +573,45 @@ async def create_epic(
         labels=labels,
     )
     tool_func = create_epic_tool(str(config.data_dir))
+    return await tool_func(input_data)
+
+
+@mcp.tool()
+async def create_epic_with_project(
+    title: str,
+    description: str = "",
+    priority: int = 2,
+    labels: list[str] | None = None,
+    jira_project_key: str | None = None,
+) -> str:
+    """
+    Create an epic and linked Second Brain project together in one operation.
+
+    This is the recommended way to start a new initiative. It creates:
+    1. A Beads epic for dependency tracking and coordination
+    2. A Second Brain project for notes and time tracking
+    3. Links them together with the same title and tags
+
+    Perfect for starting new features or complex work that needs both
+    high-level coordination (epic) and detailed notes (project).
+
+    Args:
+        title: Title for both epic and project
+        description: Description for both (optional)
+        priority: Epic priority 0-4 (0=lowest, 4=highest)
+        labels: Labels/tags for both (optional)
+        jira_project_key: Jira project key for the project (optional)
+    """
+    from .tools.epics import EpicProjectCreateInput
+
+    input_data = EpicProjectCreateInput(
+        title=title,
+        description=description,
+        priority=priority,
+        labels=labels,
+        jira_project_key=jira_project_key,
+    )
+    tool_func = create_epic_with_project_tool(str(config.data_dir))
     return await tool_func(input_data)
 
 

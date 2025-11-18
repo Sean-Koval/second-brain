@@ -97,13 +97,18 @@ Generate comprehensive reports with completed tasks, time spent, and project bre
 ### 🚀 Epic & Dependency Management
 
 ```bash
-sb epic create "API Migration"
+# Create epic + project together (recommended)
+sb issue create-with-project "API Migration" \
+  --labels backend,migration
+
+# Or separate steps
+sb epic create "Mobile App"
 sb issue create "Migrate auth" --epic SB-1
 sb issue add-dependency SB-3 SB-2 --type blocks
 sb issue ready  # Auto-find ready work
 ```
 
-Organize large initiatives with dependency tracking powered by Beads.
+**New!** Create epic + project in one command for seamless integration between dependency tracking (Beads) and notes/time tracking (Second Brain).
 
 </td>
 <td width="50%">
@@ -259,13 +264,13 @@ Then in Claude:
 Quick workflows in Claude Code:
 
 ```bash
-/sb-log              # Add work log entry
-/sb-current-work     # Show active tasks
-/sb-task-create      # Create a new task
-/sb-epic-create      # Create an epic
-/sb-issue-ready      # Find ready work
-/sb-report           # Generate work report
-/sb-weekly-review    # Weekly review workflow
+/sb-log                      # Add work log entry
+/sb-current-work             # Show active tasks
+/sb-task-create              # Create a new task
+/sb-epic-project-create      # Create epic + project together (NEW!)
+/sb-issue-ready              # Find ready work
+/sb-report                   # Generate work report
+/sb-weekly-review            # Weekly review workflow
 ```
 
 Copy to your project:
@@ -359,17 +364,25 @@ sb project status mobile-app-redesign
 ### Epic & Issue Management
 
 ```bash
-# Create epic for large initiative
-sb epic create "API v2 Migration" --priority 4 --labels "backend,migration"
+# RECOMMENDED: Create epic + project together for new initiatives
+sb issue create-with-project "API v2 Migration" \
+  --priority 4 \
+  --labels backend,migration \
+  --description "Migrate all API endpoints to v2"
+# Creates both: Epic in Beads + Project in Second Brain
 
 # Create issues under the epic
-sb issue create "Migrate auth endpoints" --epic SB-1 --priority 4
-sb issue create "Migrate user endpoints" --epic SB-1 --priority 3
+sb issue create "Migrate auth endpoints" --epic SB-1 --priority 4 --with-task --project api-v2-migration
+sb issue create "Migrate user endpoints" --epic SB-1 --priority 3 --with-task --project api-v2-migration
+
+# Add notes and track work
+sb note create "Migration Strategy" --project api-v2-migration
+sb log add "Started endpoint migration" --task-id 5 --time 120
 
 # Add dependency (auth must finish before users)
 sb issue add-dependency SB-3 SB-2 --type blocks
 
-# Find work that's ready to start
+# Find work that's ready to start (no blockers)
 sb issue ready
 
 # Check overall project health

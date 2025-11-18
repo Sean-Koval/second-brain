@@ -261,25 +261,153 @@ Then in Claude:
 
 ### Slash Commands
 
-Quick workflows in Claude Code:
+27 pre-built workflows for Claude Code - supports both conversational and quick modes.
+
+#### Installation
 
 ```bash
-/sb-log                      # Add work log entry
-/sb-current-work             # Show active tasks
-/sb-task-create              # Create a new task
-/sb-epic-project-create      # Create epic + project together (NEW!)
-/sb-issue-ready              # Find ready work
-/sb-report                   # Generate work report
-/sb-weekly-review            # Weekly review workflow
-```
-
-Copy to your project:
-```bash
+# Copy all slash commands to your project
 mkdir -p .claude/commands
-cp examples/commands/*.md .claude/commands/
+cp ~/.local/share/uv/tools/second-brain/examples/commands/*.md .claude/commands/
+
+# Restart Claude Code
 ```
 
-📖 **Slash commands guide:** [examples/README.md](examples/README.md)
+#### Quick Mode Examples (Day-to-Day Work)
+
+**Morning - Start Your Day:**
+```
+/sb-current-work
+# Shows: Active tasks, today's logs, high priority items
+
+/sb-issue-ready --priority 4
+# Shows: Critical work ready to start (no blockers)
+```
+
+**During Work - Log & Create:**
+```
+/sb-log "Implemented OAuth integration" --task-id 42 --time 120
+
+/sb-task-create "Fix login timeout bug" --project auth --priority high
+
+/sb-note-create "API Architecture Decisions" --project backend --content "Using REST over GraphQL because..."
+```
+
+**Starting New Feature:**
+```
+/sb-epic-project-create "Mobile App v2" --priority 4 --labels mobile,frontend
+# Creates both: Epic in Beads + Project in Second Brain
+# Then work on it:
+#   - Create issues under epic
+#   - Create tasks in project
+#   - Link them together
+```
+
+**Finding Information:**
+```
+/sb-search-all "authentication"
+# Search everything: notes, tasks, work logs, issues
+
+/sb-project-view backend-api
+# Complete project overview: tasks, notes, progress, health
+
+/sb-task-view 42
+# Everything about task 42: notes, work logs, linked issue, timeline
+```
+
+**End of Day:**
+```
+/sb-daily-summary
+# Reviews: Work logged, tasks completed, in-progress items
+
+/sb-task-update 42 --status done --time 180
+```
+
+**Weekly Review:**
+```
+/sb-weekly-summary
+# Comprehensive review: Accomplishments, blockers, planning
+
+/sb-report
+# Generate detailed work report for team updates
+```
+
+#### Conversational Mode Examples
+
+Just type the command and Claude guides you:
+
+**Example 1: Adding Work Log**
+```
+You: /sb-log
+Claude: "What did you work on?"
+You: "Fixed authentication bug in OAuth flow"
+Claude: "Should this be linked to a task?"
+You: "Yes, task 42"
+Claude: "How much time did you spend? (in minutes)"
+You: "90 minutes"
+Claude: ✓ Work log added! Linked to task #42, 90 minutes tracked.
+```
+
+**Example 2: Creating Epic + Project**
+```
+You: /sb-epic-project-create
+Claude: "What's the name of this initiative?"
+You: "Payment System Redesign"
+Claude: "Brief description? (optional)"
+You: "Complete overhaul of payment processing with Stripe"
+Claude: "Priority? (0-4, default 2)"
+You: "4"
+Claude: "Any labels/tags? (comma-separated)"
+You: "backend,payments,high-priority"
+
+Claude: ✓ Epic + Project created!
+        Epic ID: epic-042 ↔️ Project: payment-system-redesign
+
+        Next steps:
+        1. Create issues: sb issue create "..." --epic epic-042
+        2. Create tasks: sb task add "..." --project payment-system-redesign
+        3. Add notes: sb note create "..." --project payment-system-redesign
+```
+
+**Example 3: Finding Ready Work**
+```
+You: /sb-issue-ready
+Claude: Finding issues with no blockers...
+
+        🎯 3 issues ready to work on:
+
+        1. Implement Stripe webhooks (epic-042)
+           Priority: High | Type: feature
+
+        2. Add payment UI components (epic-042)
+           Priority: High | Type: feature
+
+        3. Write integration tests (epic-042)
+           Priority: Medium | Type: task
+
+        💡 All dependencies satisfied - start any time!
+```
+
+#### Complete Command List
+
+| Command | Purpose | Quick Example |
+|---------|---------|---------------|
+| **Workflow Guides** |||
+| `/sb-daily-dev-workflow` | Complete daily routine | Interactive guide |
+| `/sb-epic-project-create` | Create epic + project | `/sb-epic-project-create "Feature" --priority 3` |
+| `/sb-weekly-summary` | Weekly review | Generates summary |
+| **Query Commands** |||
+| `/sb-search-all` | Global search | `/sb-search-all "authentication"` |
+| `/sb-project-view` | Project overview | `/sb-project-view backend-api` |
+| `/sb-task-view` | Task details | `/sb-task-view 42` |
+| `/sb-issue-view` | Issue/epic view | `/sb-issue-view epic-042` |
+| **Basic Operations** |||
+| `/sb-log` | Log work | `/sb-log "Fixed bug" --task-id 42 --time 90` |
+| `/sb-task-create` | Create task | `/sb-task-create "Task" --project api --priority high` |
+| `/sb-current-work` | Show active work | Displays status |
+| `/sb-issue-ready` | Find ready work | `/sb-issue-ready --priority 4` |
+
+📖 **Full guide:** [examples/README.md](examples/README.md) • [docs/slash-commands.md](docs/slash-commands.md)
 
 ---
 

@@ -4,6 +4,328 @@
 
 Second Brain is designed as a **global, persistent knowledge base** that follows you across all projects and machines. Think of it as your personal work database that lives in one central location.
 
+---
+
+## System Architecture
+
+### High-Level Architecture Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           USER INTERFACES                                │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                           │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌─────────────┐ │
+│  │   CLI Tool   │  │  MCP Server  │  │    Slash     │  │   Future    │ │
+│  │  (sb cmd)    │  │  (Claude AI) │  │   Commands   │  │   Web UI    │ │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  └──────┬──────┘ │
+│         │                 │                 │                 │          │
+└─────────┼─────────────────┼─────────────────┼─────────────────┼──────────┘
+          │                 │                 │                 │
+          └─────────────────┴─────────────────┴─────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          APPLICATION LAYER                               │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                           │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │                      Core Business Logic                         │   │
+│  │  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌───────────┐ │   │
+│  │  │  Work Log  │  │  Project   │  │    Task    │  │   Note    │ │   │
+│  │  │ Operations │  │ Operations │  │ Operations │  │Operations │ │   │
+│  │  └────────────┘  └────────────┘  └────────────┘  └───────────┘ │   │
+│  │                                                                   │   │
+│  │  ┌────────────┐  ┌────────────┐  ┌────────────┐                │   │
+│  │  │   Issue    │  │    Epic    │  │  Report    │                │   │
+│  │  │ Operations │  │ Operations │  │ Generator  │                │   │
+│  │  └────────────┘  └────────────┘  └────────────┘                │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                                                                           │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          STORAGE LAYER                                   │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                           │
+│  ┌──────────────────────────────┐  ┌──────────────────────────────┐    │
+│  │   HYBRID STORAGE INDEXER     │  │   BEADS INTEGRATION          │    │
+│  │                              │  │                              │    │
+│  │  ┌────────────────────────┐ │  │  ┌────────────────────────┐ │    │
+│  │  │   SQLite Database      │ │  │  │   Beads Client         │ │    │
+│  │  │   (index.db)           │ │  │  │   (Epic/Issue/Deps)    │ │    │
+│  │  │                        │ │  │  │                        │ │    │
+│  │  │  • Projects            │ │  │  │  • Epics               │ │    │
+│  │  │  • Tasks               │ │  │  │  • Issues              │ │    │
+│  │  │  • Work Logs           │ │  │  │  • Dependencies        │ │    │
+│  │  │  • Notes               │ │  │  │  • Ready Work          │ │    │
+│  │  │  • Transcripts         │ │  │  └────────────────────────┘ │    │
+│  │  │  • Relationships       │ │  │                              │    │
+│  │  └────────────────────────┘ │  │  ┌────────────────────────┐ │    │
+│  │           ↕                  │  │  │   .beads/ directory    │ │    │
+│  │  ┌────────────────────────┐ │  │  │   (JSONL files)        │ │    │
+│  │  │   Markdown Files       │ │  │  │                        │ │    │
+│  │  │                        │ │  │  │  • issues.jsonl        │ │    │
+│  │  │  • projects/*.md       │ │  │  │  • dependencies.jsonl  │ │    │
+│  │  │  • work_logs/*.md      │ │  │  │  • metadata.json       │ │    │
+│  │  │  • notes/*.md          │ │  │  └────────────────────────┘ │    │
+│  │  │  • transcripts/*.md    │ │  │                              │    │
+│  │  └────────────────────────┘ │  └──────────────────────────────┘    │
+│  │                              │                                       │
+│  │  • Fast queries (SQL)        │  • Dependency graphs                 │
+│  │  • Human readable (MD)       │  • Blocker detection                 │
+│  │  • Git-friendly diffs        │  • Ready work finder                 │
+│  │  • Bi-directional sync       │  • Epic breakdown                    │
+│  └──────────────────────────────┘                                       │
+│                                                                           │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                       PERSISTENCE & SYNC                                 │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                           │
+│  ┌──────────────────────────────────────────────────────────────────┐  │
+│  │               ~/.second-brain/ (Git Repository)                   │  │
+│  │                                                                    │  │
+│  │  • All data versioned                                             │  │
+│  │  • Syncs via GitHub (private repo)                                │  │
+│  │  • Available across all machines                                  │  │
+│  │  • Full history and recovery                                      │  │
+│  └──────────────────────────────────────────────────────────────────┘  │
+│                                                                           │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Component Breakdown
+
+#### 1. **User Interfaces**
+
+**CLI Tool (`sb` command)**
+- Direct terminal access to all features
+- Runs locally, fast execution
+- Rich terminal UI with colors and formatting
+- Examples: `sb log add`, `sb task update`, `sb issue ready`
+
+**MCP Server**
+- Enables AI agents (Claude Code, Claude Desktop, Gemini) to use Second Brain
+- Exposes 30+ tools for creating, querying, and updating data
+- Asynchronous Python server using FastMCP
+- Runs as background process, called by AI agents
+
+**Slash Commands**
+- Pre-written workflows for Claude Code
+- 27 commands covering workflows, queries, and operations
+- Support both conversational and quick modes
+- Teach agent how to use CLI or MCP tools
+
+**Future Web UI** (planned)
+- Dashboard for visualizing work patterns
+- Analytics and charts
+- Mobile-friendly access
+- Generated from local data
+
+---
+
+#### 2. **Application Layer**
+
+**Core Operations Classes:**
+- `WorkLogOps` - Create, query, and manage daily work logs
+- `ProjectOps` - Project CRUD, status tracking
+- `TaskOps` - Task management with status, priority, time tracking
+- `NoteOps` - Note creation, search, linking to tasks/projects
+- `IssueOps` - Beads issue integration
+- `EpicOps` - Epic creation and management
+- `ReportGenerator` - Generate work reports, summaries
+- `TranscriptOps` - Meeting transcript processing
+
+**Business Logic:**
+- Task-Issue linking and synchronization
+- Time tracking aggregation
+- Report generation
+- Search and filtering
+- Dependency resolution (via Beads)
+
+---
+
+#### 3. **Storage Layer**
+
+**Hybrid Storage Pattern** (Best of Both Worlds):
+
+```
+SQLite Database (index.db)          Markdown Files
+─────────────────────────           ────────────────
+Fast queries                    ←→  Human readable
+Relationships                   ←→  Git-friendly
+Indexes                         ←→  Editor-friendly
+Aggregations                    ←→  Shareable
+
+        Bi-directional Sync
+     (StorageIndexer maintains)
+```
+
+**SQLite Database:**
+- Fast queries and filtering
+- Relationship management
+- ACID transactions
+- Full-text search (FTS5)
+- Tables: projects, tasks, work_logs, notes, transcripts
+
+**Markdown Files:**
+- Human-readable documentation
+- YAML frontmatter for metadata
+- Git-friendly diffs
+- Can edit directly in any text editor
+- Backup and portability
+
+**StorageIndexer:**
+- Keeps SQLite and Markdown in sync
+- Updates both on every change
+- Rebuilds database from markdown if corrupted
+- Ensures consistency
+
+**Beads Integration:**
+- Separate JSONL-based storage for epics, issues, dependencies
+- Graph-based dependency tracking
+- Automatic blocker detection
+- Ready work finder algorithm
+- Lives in `.beads/` directory
+
+---
+
+#### 4. **Data Flow**
+
+**Creating a Work Log Entry:**
+
+```mermaid
+graph LR
+    A[User: sb log add] --> B[CLI Parser]
+    B --> C[WorkLogOps.create]
+    C --> D[StorageIndexer]
+    D --> E[SQLite INSERT]
+    D --> F[Markdown File Write]
+    E --> G[Return Success]
+    F --> G
+```
+
+**AI Agent Querying Work:**
+
+```mermaid
+graph LR
+    A[Claude Code] --> B[MCP Server]
+    B --> C[get_work_logs tool]
+    C --> D[WorkLogOps.query]
+    D --> E[SQLite SELECT]
+    E --> F[Format Response]
+    F --> G[Return to AI]
+```
+
+**Creating Epic + Project:**
+
+```mermaid
+graph TB
+    A[User: sb issue create-with-project] --> B[CLI Command]
+    B --> C[Beads Client]
+    C --> D[Create Epic in .beads/]
+    D --> E[Epic ID Generated]
+    E --> F[ProjectOps.create]
+    F --> G[StorageIndexer]
+    G --> H[SQLite INSERT project]
+    G --> I[Markdown projects/name.md]
+    H --> J[Link Epic ↔️ Project]
+    I --> J
+    J --> K[Show User Both IDs]
+```
+
+---
+
+### Technology Stack
+
+**Core:**
+- Python 3.10+
+- SQLAlchemy (ORM)
+- SQLite (Database)
+- Click (CLI framework)
+- Rich (Terminal UI)
+- FastMCP (MCP server)
+- Pydantic (Validation)
+
+**Storage:**
+- SQLite with FTS5 (Full-text search)
+- python-frontmatter (YAML + Markdown)
+- Beads (Dependency tracking, JSONL)
+
+**Integration:**
+- MCP Protocol (AI agent integration)
+- Git (Version control and sync)
+- Optional: Jira API (Ticket sync)
+
+**Development:**
+- uv (Package management)
+- pytest (Testing)
+- black (Code formatting)
+
+---
+
+### Key Design Decisions
+
+#### Why Hybrid Storage (SQLite + Markdown)?
+
+**Problem:** Need both fast queries AND human readability
+
+**Solution:** Hybrid approach
+- ✅ Fast queries when needed (reports, filtering)
+- ✅ Human-readable for browsing and editing
+- ✅ Git-friendly for version control
+- ✅ Best of both worlds
+
+**Trade-off:** Added complexity of sync, but StorageIndexer handles it transparently
+
+---
+
+#### Why Global Installation?
+
+**Problem:** Work spans multiple projects/repos
+
+**Solution:** Install once in `~/.second-brain/`, use everywhere
+- ✅ One source of truth for all work
+- ✅ Works from any directory
+- ✅ Cross-project task tracking
+- ✅ Comprehensive reports across all projects
+
+**Trade-off:** Requires environment variable, but worth it for UX
+
+---
+
+#### Why MCP Server?
+
+**Problem:** Want AI agents to access Second Brain
+
+**Solution:** MCP (Model Context Protocol) server
+- ✅ Works with Claude Code, Claude Desktop, Gemini
+- ✅ 30+ tools for all operations
+- ✅ Asynchronous, fast responses
+- ✅ Global access (not per-project)
+
+**Trade-off:** Requires configuration, but one-time setup
+
+---
+
+#### Why Beads Integration?
+
+**Problem:** Need dependency tracking and blocker detection
+
+**Solution:** Integrate with Beads library
+- ✅ Proven dependency graph algorithm
+- ✅ Automatic ready work finder
+- ✅ Epic breakdown and visualization
+- ✅ 4 dependency types (blocks, related, parent-child, discovered-from)
+
+**Trade-off:** Additional dependency, but optional (core works without it)
+
+---
+
 ## Design Philosophy
 
 ### Global, Not Per-Project

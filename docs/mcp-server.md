@@ -3,17 +3,20 @@
 Complete reference for all MCP server tools that AI agents can use to interact with your Second Brain.
 
 > **Works Offline**: All tools work offline except `sync_jira_issues` and `get_jira_issue`.
+>
+> **Prerequisite for Epic/Issue Tools**: Run `sb init --beads --prefix SB` in your project directory once before using epic/issue tools.
 
 ## Overview
 
-The Second Brain MCP server provides 15 tools organized into 6 categories:
+The Second Brain MCP server provides 25+ tools organized into 7 categories:
 
 1. **Work Logs** - Daily work tracking
 2. **Projects** - Project management
 3. **Tasks** - Task tracking and updates
-4. **Reports** - Analytics and summaries
-5. **Jira** - Jira integration (optional)
-6. **Transcripts** - Meeting/call transcript processing
+4. **Epics & Issues** - Dependency tracking and epic management (requires `bd init`)
+5. **Reports** - Analytics and summaries
+6. **Jira** - Jira integration (optional)
+7. **Transcripts** - Meeting/call transcript processing
 
 ## Work Log Tools
 
@@ -502,6 +505,416 @@ Status: in_progress"
 
 ---
 
+## Epic & Issue Tools
+
+> **Prerequisite**: Run `sb init --beads --prefix SB` once in your project directory before using these tools.
+
+Epic and issue tools provide dependency tracking, blocker detection, and epic management through Beads integration.
+
+### `create_epic`
+
+Create a new epic for organizing large initiatives.
+
+**Parameters:**
+- `title` (string, required): Epic title
+- `description` (string, optional): Epic description
+- `priority` (integer, optional): Priority 0-4 (0=lowest, 4=highest, default: 2)
+- `labels` (array of strings, optional): Labels/tags for categorization
+
+**Returns:** Confirmation with epic ID and details
+
+**Example Usage:**
+```
+Agent call:
+{
+  "title": "Mobile App Redesign",
+  "description": "Complete UI/UX overhaul of mobile app",
+  "priority": 4,
+  "labels": ["mobile", "design", "q1-2025"]
+}
+
+Response:
+"Epic created!
+ID: SB-1
+Title: Mobile App Redesign
+Priority: Highest (4)
+Labels: mobile, design, q1-2025"
+```
+
+**Use Cases:**
+- Organizing large multi-issue initiatives
+- Planning quarterly objectives
+- Tracking feature development
+- Grouping related work
+
+---
+
+### `create_epic_with_project`
+
+Create an epic AND a Second Brain project together (RECOMMENDED).
+
+**Parameters:**
+- `title` (string, required): Title for both epic and project
+- `description` (string, optional): Description for both
+- `priority` (integer, optional): Epic priority 0-4 (default: 2)
+- `labels` (array of strings, optional): Labels/tags for both
+
+**Returns:** Confirmation with epic ID, project slug, and next steps
+
+**Example Usage:**
+```
+Agent call:
+{
+  "title": "Payment Integration",
+  "description": "Add Stripe payment processing",
+  "priority": 4,
+  "labels": ["backend", "payments", "revenue"]
+}
+
+Response:
+"Epic + Project created successfully!
+
+Epic (Beads):
+  ID: SB-5
+  Title: Payment Integration
+  Priority: Highest (4)
+  Status: open
+  Labels: backend, payments, revenue
+
+Project (Second Brain):
+  ID: 12
+  Name: Payment Integration
+  Slug: payment-integration
+  Tags: backend, payments, revenue
+
+Integration:
+  Epic ID: SB-5 ↔️ Project Slug: payment-integration
+
+Next Steps:
+  1. Create issues: sb issue create 'Issue Title' --epic SB-5
+  2. Create tasks: sb task add 'Task Title' --project payment-integration
+  3. Link issues to tasks with --with-task flag
+  4. Track work: sb log add 'Work done' --project payment-integration"
+```
+
+**Use Cases:**
+- Starting new major features/initiatives
+- Combining dependency tracking with time/note tracking
+- Team collaboration on large projects
+- Maintaining context across epic and daily work
+
+---
+
+### `create_issue`
+
+Create a new issue (task, bug, feature, etc.).
+
+**Parameters:**
+- `title` (string, required): Issue title
+- `description` (string, optional): Issue description
+- `issue_type` (string, optional): Type: bug, feature, task, epic, chore (default: "task")
+- `priority` (integer, optional): Priority 0-4 (default: 2)
+- `parent_epic_id` (string, optional): Parent epic ID (e.g., "SB-1")
+- `blocks` (array of strings, optional): Issue IDs this issue blocks
+- `labels` (array of strings, optional): Labels/tags
+- `external_ref` (string, optional): External reference (Jira key, GitHub issue, etc.)
+- `with_task` (boolean, optional): Create linked Second Brain task (default: false)
+- `project_slug` (string, optional): Project slug for linked task (required if with_task=true)
+
+**Returns:** Confirmation with issue ID and linked task info (if created)
+
+**Example Usage:**
+```
+Agent call:
+{
+  "title": "Implement Stripe webhook handler",
+  "description": "Handle payment_intent.succeeded webhook",
+  "issue_type": "task",
+  "priority": 3,
+  "parent_epic_id": "SB-5",
+  "labels": ["backend", "webhooks"],
+  "with_task": true,
+  "project_slug": "payment-integration"
+}
+
+Response:
+"Issue created!
+ID: SB-6
+Title: Implement Stripe webhook handler
+Type: task
+Priority: High (3)
+Parent Epic: SB-5
+
+Linked Second Brain task created: #45
+  Project: Payment Integration"
+```
+
+**Use Cases:**
+- Breaking down epics into actionable issues
+- Tracking bugs and features
+- Creating work with dependencies
+- Linking issues to time/note tracking
+
+---
+
+### `update_issue`
+
+Update an existing issue's properties.
+
+**Parameters:**
+- `issue_id` (string, required): Issue ID to update (e.g., "SB-6")
+- `title` (string, optional): New title
+- `description` (string, optional): New description
+- `status` (string, optional): New status: open, in_progress, blocked, closed
+- `priority` (integer, optional): New priority 0-4
+
+**Returns:** Confirmation with updated details
+
+**Example Usage:**
+```
+Agent call:
+{
+  "issue_id": "SB-6",
+  "status": "in_progress"
+}
+
+Response:
+"Issue SB-6 updated!
+Title: Implement Stripe webhook handler
+Status: in_progress
+Priority: High (3)"
+```
+
+---
+
+### `close_issue`
+
+Close an issue.
+
+**Parameters:**
+- `issue_id` (string, required): Issue ID to close
+- `reason` (string, optional): Reason for closing (default: "Completed")
+
+**Returns:** Confirmation message
+
+**Example Usage:**
+```
+Agent call:
+{
+  "issue_id": "SB-6",
+  "reason": "Implemented and tested successfully"
+}
+
+Response:
+"Issue SB-6 closed!
+Title: Implement Stripe webhook handler
+Reason: Implemented and tested successfully"
+```
+
+---
+
+### `get_issue`
+
+Get detailed information about a specific issue.
+
+**Parameters:**
+- `issue_id` (string, required): Issue ID (e.g., "SB-6")
+
+**Returns:** Detailed issue information including dependencies
+
+**Example Usage:**
+```
+Agent call:
+{
+  "issue_id": "SB-6"
+}
+
+Response:
+"Implement Stripe webhook handler (SB-6)
+
+Type: task
+Status: in_progress
+Priority: High
+
+Description:
+Handle payment_intent.succeeded webhook
+
+Labels: backend, webhooks
+
+Parent Epic: SB-5 (Payment Integration)
+
+Dependencies (2):
+  - SB-4: Set up Stripe API client [blocks]
+  - SB-5: Payment Integration [parent-child]
+
+Dependents (1):
+  - SB-7: Test payment flow"
+```
+
+---
+
+### `list_issues`
+
+List issues with optional filtering.
+
+**Parameters:**
+- `status` (string, optional): Filter by status (open, in_progress, blocked, closed)
+- `issue_type` (string, optional): Filter by type (bug, feature, task, epic, chore)
+- `priority` (integer, optional): Filter by priority 0-4
+- `limit` (integer, optional): Max number to return (default: 50)
+
+**Returns:** Formatted list of matching issues
+
+**Example Usage:**
+```
+Agent call:
+{
+  "status": "open",
+  "priority": 4,
+  "limit": 10
+}
+
+Response:
+"Found 3 issue(s):
+
+| ID   | Title                          | Type    | Status | Priority |
+|------|--------------------------------|---------|--------|----------|
+| SB-3 | Database migration             | task    | ⬜ open | Highest  |
+| SB-5 | Payment Integration            | epic    | ⬜ open | Highest  |
+| SB-8 | Fix memory leak in API         | bug     | ⬜ open | Highest  |"
+```
+
+---
+
+### `list_epics`
+
+List all epics with optional filtering.
+
+**Parameters:**
+- `status` (string, optional): Filter by status (open, in_progress, blocked, closed)
+- `limit` (integer, optional): Max number to return (default: 50)
+
+**Returns:** Formatted list of epics
+
+**Example Usage:**
+```
+Agent call:
+{
+  "status": "open"
+}
+
+Response:
+"Found 2 epic(s):
+
+| ID   | Title               | Status | Priority |
+|------|---------------------|--------|----------|
+| SB-1 | Mobile App Redesign | 📋 open | Highest  |
+| SB-5 | Payment Integration | 📋 open | Highest  |"
+```
+
+---
+
+### `add_dependency`
+
+Add a dependency relationship between two issues.
+
+**Parameters:**
+- `issue_id` (string, required): The issue that depends on another
+- `depends_on_id` (string, required): The issue that is depended upon
+- `dep_type` (string, optional): Dependency type: blocks, related, parent-child, discovered-from (default: "blocks")
+
+**Returns:** Confirmation of dependency relationship
+
+**Example Usage:**
+```
+Agent call:
+{
+  "issue_id": "SB-7",
+  "depends_on_id": "SB-6",
+  "dep_type": "blocks"
+}
+
+Response:
+"Dependency added!
+Type: blocks
+Relationship: SB-6 blocks SB-7"
+```
+
+**Dependency Types:**
+- **blocks**: depends_on_id must complete before issue_id can start
+- **related**: Issues are related but no strict ordering
+- **parent-child**: depends_on_id is parent of issue_id
+- **discovered-from**: issue_id was discovered while working on depends_on_id
+
+---
+
+### `get_ready_work`
+
+Find issues ready to work on (no open blockers).
+
+**Parameters:**
+- `limit` (integer, optional): Max number to return (default: 10)
+- `priority` (integer, optional): Filter by specific priority
+
+**Returns:** List of unblocked issues sorted by priority
+
+**Example Usage:**
+```
+Agent call:
+{
+  "priority": 4,
+  "limit": 5
+}
+
+Response:
+"🎯 Found 2 issue(s) ready to work on:
+
+| ID   | Title                     | Type | Priority |
+|------|---------------------------|------|----------|
+| SB-3 | Database migration        | task | Highest  |
+| SB-8 | Fix memory leak in API    | bug  | Highest  |
+
+💡 These issues have no open blockers and can be started immediately!"
+```
+
+**Use Cases:**
+- Finding what to work on next
+- Sprint planning
+- Identifying unblocked work
+- Prioritizing daily tasks
+
+---
+
+### `get_epic_stats`
+
+Get project statistics and overview.
+
+**Returns:** Summary of total, open, closed, blocked, and ready issues
+
+**Example Usage:**
+```
+Agent call: {}
+
+Response:
+"📊 Project Statistics
+
+Total Issues: 12
+Open: 8
+Closed: 4
+Blocked: 2
+Ready to Work: 6
+
+💡 You have 6 issue(s) ready to work on!"
+```
+
+**Use Cases:**
+- Project health overview
+- Sprint planning
+- Status reporting
+- Identifying bottlenecks
+
+---
+
 ## Transcript Tools
 
 ### `create_transcript`
@@ -709,6 +1122,48 @@ Attendees: John, Sarah, Mike
 4. Agent uses: update_transcript (summary, actions)
 5. Agent uses: create_task (for each action item)
 6. Agent links tasks to projects
+```
+
+### Planning New Initiative
+```
+1. User: "Start planning payment integration feature"
+2. Agent uses: create_epic_with_project (creates epic + project)
+3. Agent discusses breakdown with user
+4. Agent uses: create_issue (multiple times for sub-tasks)
+5. Agent uses: add_dependency (to set blockers)
+6. Agent uses: get_ready_work (to show what can start)
+```
+
+### Finding Work to Do
+```
+1. User: "What should I work on next?"
+2. Agent uses: get_ready_work (with priority filter)
+3. Agent uses: get_issue (for each ready issue to show details)
+4. Agent presents options to user
+5. User chooses an issue
+6. Agent uses: update_issue (status=in_progress)
+7. Agent uses: create_task (with_task=true for time tracking)
+```
+
+### Epic Breakdown and Execution
+```
+1. User: "Break down the mobile app redesign epic"
+2. Agent uses: get_issue (epic_id) to see current state
+3. Agent discusses components with user
+4. Agent uses: create_issue (for each component, linked to epic)
+5. Agent uses: add_dependency (to set order of work)
+6. Agent uses: list_issues (filter by epic) to show all items
+7. Agent uses: get_epic_stats to show progress
+```
+
+### Checking Project Health
+```
+1. User: "How's the project looking?"
+2. Agent uses: get_epic_stats (overall numbers)
+3. Agent uses: list_issues (status=blocked) to see blockers
+4. Agent uses: get_ready_work to see available work
+5. Agent summarizes: X ready, Y blocked, Z in progress
+6. Agent suggests: "Start with SB-5 (no blockers, high priority)"
 ```
 
 ---

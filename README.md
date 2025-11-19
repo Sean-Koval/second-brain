@@ -97,6 +97,9 @@ Generate comprehensive reports with completed tasks, time spent, and project bre
 ### 🚀 Epic & Dependency Management
 
 ```bash
+# One-time setup per project
+sb init --beads --prefix SB
+
 # Create epic + project together (recommended)
 sb issue create-with-project "API Migration" \
   --labels backend,migration
@@ -106,6 +109,7 @@ sb epic create "Mobile App"
 sb issue create "Migrate auth" --epic SB-1
 sb issue add-dependency SB-3 SB-2 --type blocks
 sb issue ready  # Auto-find ready work
+sb issue stats  # Project overview
 ```
 
 **New!** Create epic + project in one command for seamless integration between dependency tracking (Beads) and notes/time tracking (Second Brain).
@@ -116,8 +120,9 @@ sb issue ready  # Auto-find ready work
 ### 🤖 Ready Work Detection
 
 ```bash
-sb issue stats  # Project overview
-sb issue ready --priority 4  # Find critical work
+sb issue ready              # All unblocked work
+sb issue ready --priority 4 # Critical only
+sb issue list --status blocked  # See what's blocked
 ```
 
 Automatically finds issues with no blockers - perfect for "what should I work on next?"

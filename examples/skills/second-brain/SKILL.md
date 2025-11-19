@@ -62,7 +62,7 @@ At the start of any session, **check Second Brain** to establish context:
 Session Start:
 - [ ] Run sb task list --status in_progress to see active work
 - [ ] Run sb log show --days 1 to see today's work
-- [ ] Run sb issue ready (if using Beads integration)
+- [ ] Run sb issue ready (if using Beads - requires bd init first)
 - [ ] Report to user: "X tasks in progress: [summary]"
 - [ ] Report: "Today's logs: [summary]" or "No work logged yet today"
 ```
@@ -70,7 +70,9 @@ Session Start:
 **Report format:**
 - "You have 3 tasks in progress: [list tasks]"
 - "Today you've logged: [summarize logs]"
-- "Issue X is ready to work on (no blockers)"
+- "Issue SB-5 is ready to work on (no blockers)"
+
+**Note**: Only run `sb issue ready` if bd is initialized (`.beads/` directory exists in project). Check with `ls -la .beads/` to verify.
 
 This establishes immediate shared context without requiring user prompting.
 
@@ -198,11 +200,18 @@ sb project list --status active   # Only active
 
 ### Issue/Epic Management (Beads Integration)
 
+**⚠️ PREREQUISITE**: Beads must be initialized first:
+```bash
+cd /path/to/your/project
+sb init --beads --prefix SB  # Or any prefix you prefer
+```
+
 **Create epic + project together (RECOMMENDED):**
 ```bash
 sb issue create-with-project "Payment Integration" \
   --priority 4 \
   --labels backend,payments
+# Creates: Epic SB-1 in bd + Project in Second Brain
 ```
 
 **Create issues:**
@@ -389,39 +398,139 @@ sb issue ready --priority 3,4
 
 ## Integration with bd (Beads)
 
-Second Brain and bd work together:
+Second Brain and bd work together but use **different databases**:
 
 **Second Brain provides:**
 - Rich markdown notes
 - Time tracking
 - Work logs
 - Project organization
+- **Database**: `~/.second-brain/data/index.db` (global, one database)
 
 **bd (Beads) provides:**
 - Dependency graphs
 - Blocker detection
 - Ready work finder
 - Epic breakdown
+- **Database**: `.beads/*.db` (per-project, auto-discovered)
 
-**Integration points:**
+### Epic/Issue Setup (One-Time Setup)
+
+**IMPORTANT**: Before using `sb epic` or `sb issue` commands, run this one-time setup in your project:
+
+```bash
+# Navigate to your project directory
+cd /path/to/your/project
+
+# One-time setup: Initialize Beads
+sb init --beads --prefix SB
+
+# Verify initialization
+ls -la .beads/
+# Should show: .beads/SB.db
+```
+
+**After setup, use only `sb` commands:**
+```bash
+# Create and manage epics/issues
+sb epic create "My Epic"
+sb issue create "My Issue" --epic SB-1
+sb issue list
+sb issue ready
+sb issue stats
+```
+
+**Key points:**
+- **One-time**: `sb init --beads --prefix SB` (initialize in your project directory)
+- **Everything else**: Use `sb epic` and `sb issue` commands
+- **Issue IDs**: Format is `PREFIX-N` (e.g., SB-1, SB-2 if prefix is SB)
+- **Database**: Epics/issues stored in `.beads/` (auto-discovered by `sb` commands)
+- **Prefix**: Can be customized (`--prefix PROJ`, `--prefix TEAM`, etc.)
+
+**If you see "Beads integration not available":**
+```bash
+# Check if beads-mcp is installed
+uv pip list | grep beads-mcp
+
+# Should show: beads-mcp 0.23.1 (or higher)
+
+# If not installed, reinstall Second Brain:
+uv pip install -e .
+```
+
+### Integration Points
 
 1. **Epic + Project creation:**
    ```bash
    sb issue create-with-project "Feature"
-   # Creates: Epic in Beads + Project in Second Brain
+   # Creates:
+   #   - Epic in Beads (.beads/SB.db)
+   #   - Project in Second Brain (~/.second-brain/data/index.db)
+   #   - Both linked with same name/tags
    ```
 
 2. **Issue + Task linking:**
    ```bash
-   sb issue create "Issue" --with-task --project PROJECT_SLUG
-   # Creates: Issue in Beads + Task in Second Brain (linked)
+   sb issue create "Implement API endpoint" \
+     --epic SB-1 \
+     --with-task \
+     --project feature-api
+   # Creates:
+   #   - Issue SB-2 in Beads (with epic parent)
+   #   - Task in Second Brain (linked to SB-2)
    ```
 
-3. **Workflow:**
-   - Use bd to find ready work: `bd ready` or `sb issue ready`
-   - Create task in Second Brain for notes/time: `sb task add`
-   - Log work: `sb log add --task-id`
-   - Track dependencies in bd: `bd dep add`
+3. **Add dependencies:**
+   ```bash
+   # Add dependency between issues
+   sb issue add-dependency SB-3 SB-2 --type blocks
+   # SB-2 blocks SB-3 (SB-3 can't start until SB-2 is done)
+   ```
+
+4. **Complete workflow:**
+   ```bash
+   # Find ready work (no blockers)
+   sb issue ready --priority 4
+
+   # Start working on issue SB-5
+   sb issue update SB-5 --status in_progress
+
+   # Create task for time tracking
+   sb task add "Implement feature X" --project api --issue-id SB-5
+
+   # Log work
+   sb log add "Implemented API endpoint" --task-id 42 --time 120
+
+   # Mark issue done
+   sb issue close SB-5 --reason "Completed and tested"
+
+   # Check project stats
+   sb issue stats
+   ```
+
+### Database Locations
+
+**Second Brain (global)**:
+```
+~/.second-brain/
+├── data/
+│   ├── index.db          ← Second Brain database
+│   ├── projects/         ← Markdown files
+│   └── work_logs/        ← Markdown files
+└── config.json
+```
+
+**bd (per-project)**:
+```
+/path/to/your/project/
+└── .beads/
+    └── SB.db             ← Beads database (auto-discovered)
+```
+
+**Key insight**:
+- Second Brain tracks **what you did** (work logs, notes, time)
+- bd tracks **what needs to be done** (issues, dependencies, blockers)
+- They integrate via issue IDs and shared epic/project creation
 
 ---
 
@@ -574,10 +683,41 @@ source ~/.bashrc
 - Check status: `sb task list` (no filters shows all)
 - Check date range: `sb log show --days 30`
 
+**If "Beads integration not available":**
+```bash
+# Check if beads-mcp is installed
+uv pip list | grep beads-mcp
+# Should show: beads-mcp 0.23.1 or higher
+
+# If missing, reinstall Second Brain
+source .venv/bin/activate  # If using venv
+uv pip install -e .
+```
+
+**If epic/issue commands fail:**
+```bash
+# Beads must be initialized in project directory (one-time setup)
+cd /path/to/your/project
+sb init --beads --prefix SB
+
+# Verify .beads directory exists
+ls -la .beads/
+# Should show: .beads/SB.db
+
+# Test it works with sb commands
+sb issue list
+# Should show: "Found 0 issue(s)" or list existing issues
+```
+
+**If `sb issue stats` shows "Error: 'Stats' object has no attribute 'total'":**
+- This was a compatibility bug with beads-mcp v0.23.1 (now fixed in latest version)
+- Update to the latest version of Second Brain to resolve
+
 ---
 
 ## Quick Reference
 
+### Work Logs & Tasks
 | Command | Purpose | Example |
 |---------|---------|---------|
 | `sb log add` | Log work | `sb log add "Fixed bug" --task-id 42 --time 90` |
@@ -585,12 +725,34 @@ source ~/.bashrc
 | `sb task add` | Create task | `sb task add "Title" --project api --priority high` |
 | `sb task update` | Update task | `sb task update 42 --status done` |
 | `sb task list` | List tasks | `sb task list --status in_progress` |
+
+### Notes & Projects
+| Command | Purpose | Example |
+|---------|---------|---------|
 | `sb note create` | Create note | `sb note create "Title" --task-id 42` |
 | `sb note search` | Search notes | `sb note search "keyword"` |
 | `sb project create` | Create project | `sb project create "Name" --tags tag1,tag2` |
 | `sb project status` | Project details | `sb project status PROJECT_SLUG` |
+
+### Epics & Issues (requires `sb init --beads`)
+| Command | Purpose | Example |
+|---------|---------|---------|
+| `sb init --beads` | Initialize Beads | `sb init --beads --prefix SB` |
+| `sb epic create` | Create epic | `sb epic create "Epic Name" --priority 3` |
+| `sb epic list` | List epics | `sb epic list --status open` |
+| `sb issue create` | Create issue | `sb issue create "Issue" --epic SB-1` |
 | `sb issue create-with-project` | Epic + Project | `sb issue create-with-project "Feature" -p 4` |
+| `sb issue list` | List issues | `sb issue list --type task` |
+| `sb issue show` | Show issue | `sb issue show SB-5` |
+| `sb issue update` | Update issue | `sb issue update SB-5 --status in_progress` |
+| `sb issue close` | Close issue | `sb issue close SB-5 --reason "Done"` |
 | `sb issue ready` | Find ready work | `sb issue ready --priority 4` |
+| `sb issue stats` | Project stats | `sb issue stats` |
+| `sb issue add-dependency` | Add dependency | `sb issue add-dependency SB-3 SB-2 --type blocks` |
+
+### Reports
+| Command | Purpose | Example |
+|---------|---------|---------|
 | `sb report work` | Generate report | `sb report work --days 30` |
 
 ---

@@ -45,13 +45,52 @@ def cli():
 @cli.command()
 @click.option("--global", "is_global", is_flag=True, help="Initialize in ~/.second-brain/ (recommended)")
 @click.option("--data-dir", default=None, help="Custom data directory path (for local setup)")
-def init(is_global, data_dir):
+@click.option("--beads", is_flag=True, help="Initialize Beads for epic/issue tracking in current directory")
+@click.option("--prefix", default="SB", help="Issue prefix for Beads (default: SB)")
+def init(is_global, data_dir, beads, prefix):
     """Initialize second brain.
 
     By default, initializes globally in ~/.second-brain/ (recommended).
+    Use --beads to initialize Beads for epic/issue tracking in current directory.
     Use --data-dir for local project setup (legacy).
     """
     global _config
+
+    # Handle Beads initialization
+    if beads:
+        import subprocess
+
+        # Check if bd is available
+        try:
+            result = subprocess.run(["bd", "version"], capture_output=True, text=True)
+            if result.returncode != 0:
+                console.print("[red]Error: bd command not found. Install beads-mcp first:[/red]")
+                console.print("  uv pip install beads-mcp")
+                return
+        except FileNotFoundError:
+            console.print("[red]Error: bd command not found. Install beads-mcp first:[/red]")
+            console.print("  uv pip install beads-mcp")
+            return
+
+        # Initialize bd in current directory
+        console.print(f"[bold]Initializing Beads in current directory...[/bold]")
+        result = subprocess.run(["bd", "init", "--prefix", prefix], capture_output=True, text=True)
+
+        if result.returncode == 0:
+            console.print(f"[green]✓[/green] Beads initialized successfully!")
+            console.print(f"\nIssue prefix: {prefix}")
+            console.print(f"Database: .beads/{prefix}.db")
+            console.print(f"Issues will be named: {prefix}-1, {prefix}-2, ...")
+            console.print("\n[bold]You can now use epic/issue commands:[/bold]")
+            console.print(f"  sb epic create \"My Epic\"")
+            console.print(f"  sb issue create \"My Issue\" --epic {prefix}-1")
+            console.print(f"  sb issue ready")
+            console.print(f"  sb issue stats")
+        else:
+            console.print(f"[red]Error initializing Beads:[/red]")
+            console.print(result.stderr if result.stderr else result.stdout)
+
+        return
 
     # Determine setup type
     if is_global:
@@ -1436,17 +1475,17 @@ def issue_stats():
             stats = await client.get_stats()
 
             console.print("\n[bold]📊 Project Statistics[/bold]\n")
-            console.print(f"Total Issues: {stats.total}")
-            console.print(f"Open: {stats.open}")
-            console.print(f"Closed: {stats.closed}")
-            console.print(f"Blocked: {stats.blocked}")
-            console.print(f"Ready to Work: {stats.ready}\n")
+            console.print(f"Total Issues: {stats.total_issues}")
+            console.print(f"Open: {stats.open_issues}")
+            console.print(f"Closed: {stats.closed_issues}")
+            console.print(f"Blocked: {stats.blocked_issues}")
+            console.print(f"Ready to Work: {stats.ready_issues}\n")
 
-            if stats.ready > 0:
-                console.print(f"[green]💡 You have {stats.ready} issue(s) ready to work on![/green]")
-            elif stats.blocked > 0:
-                console.print(f"[yellow]⚠️  {stats.blocked} issue(s) are blocked. Consider addressing blockers.[/yellow]")
-            elif stats.open == 0:
+            if stats.ready_issues > 0:
+                console.print(f"[green]💡 You have {stats.ready_issues} issue(s) ready to work on![/green]")
+            elif stats.blocked_issues > 0:
+                console.print(f"[yellow]⚠️  {stats.blocked_issues} issue(s) are blocked. Consider addressing blockers.[/yellow]")
+            elif stats.open_issues == 0:
                 console.print("[green]🎉 All issues are closed! Great work![/green]")
         except Exception as e:
             console.print(f"[red]Error: {e}[/red]")

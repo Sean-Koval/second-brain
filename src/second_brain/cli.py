@@ -13,6 +13,7 @@ from .db import init_db, get_session
 from .db.operations import ProjectOps, TaskOps, WorkLogOps, TranscriptOps, NoteOps
 from .storage import StorageIndexer
 from .config import get_config
+from .utils import datetime_utils
 
 console = Console()
 
@@ -277,7 +278,7 @@ def log_add(entry_text, task_id, time, date):
         if date:
             log_date = datetime.strptime(date, "%Y-%m-%d")
         else:
-            log_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            log_date = datetime_utils.now().replace(hour=0, minute=0, second=0, microsecond=0)
 
         indexer.add_work_log_entry(log_date, entry_text, task_id, time)
 
@@ -294,7 +295,7 @@ def log_show(days):
     try:
         from datetime import timedelta
 
-        end_date = datetime.now()
+        end_date = datetime_utils.now()
         start_date = end_date - timedelta(days=days)
 
         work_logs = WorkLogOps.list_by_date_range(session, start_date, end_date)

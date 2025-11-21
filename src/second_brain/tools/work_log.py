@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 from ..db import get_session
 from ..storage import StorageIndexer
+from ..utils import datetime_utils
 
 
 class WorkLogEntryInput(BaseModel):
@@ -47,7 +48,7 @@ def create_work_log_entry_tool(engine):
             if entry.date:
                 date = datetime.strptime(entry.date, "%Y-%m-%d")
             else:
-                date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+                date = datetime_utils.now().replace(hour=0, minute=0, second=0, microsecond=0)
 
             # Add entry
             work_log = indexer.add_work_log_entry(

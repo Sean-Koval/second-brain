@@ -85,6 +85,7 @@ class TaskOps:
         jira_ticket_id: Optional[str] = None,
         jira_ticket_key: Optional[str] = None,
         tags: Optional[str] = None,
+        issue_id: Optional[str] = None,
     ) -> Task:
         """Create a new task."""
         task = Task(
@@ -96,6 +97,7 @@ class TaskOps:
             jira_ticket_id=jira_ticket_id,
             jira_ticket_key=jira_ticket_key,
             tags=tags,
+            issue_id=issue_id,
         )
         session.add(task)
         session.commit()

@@ -177,6 +177,21 @@ class Config:
             "email": "",
         })
 
+    def get_timezone(self) -> str:
+        """Get timezone from config or environment variable.
+
+        Returns:
+            Timezone string (e.g., "America/New_York", "UTC")
+        """
+        # Check environment variable first
+        env_tz = os.getenv("SECOND_BRAIN_TIMEZONE")
+        if env_tz:
+            return env_tz
+
+        # Check config
+        defaults = self.user_config.get("defaults", {})
+        return defaults.get("timezone", "America/New_York")
+
     def initialize_global_setup(self) -> None:
         """Initialize global Second Brain setup.
 
@@ -204,7 +219,8 @@ class Config:
                 },
                 "defaults": {
                     "work_log_time_tracking": True,
-                    "auto_link_tasks": True
+                    "auto_link_tasks": True,
+                    "timezone": "America/New_York"
                 },
                 "paths": {
                     "data_dir": "data",

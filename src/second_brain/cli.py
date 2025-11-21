@@ -1494,6 +1494,272 @@ def issue_stats():
     asyncio.run(_stats())
 
 
+# ============================================================================
+# Key Management Commands
+# ============================================================================
+
+
+@cli.group()
+def key():
+    """Manage encryption keys."""
+    pass
+
+
+@key.command("generate")
+@click.option("--bits", type=int, default=4096, help="Key size in bits")
+@click.option("--passphrase", is_flag=True, help="Protect with passphrase")
+@click.option("--force", is_flag=True, help="Overwrite existing keys")
+def key_generate(bits, passphrase, force):
+    """Generate a new RSA key pair for encryption."""
+    from .crypto import KeyManager
+    from .crypto.validators import ensure_keys_in_gitignore
+    import getpass
+
+    config = get_app_config()
+    keys_dir = config.second_brain_dir / "keys"
+    km = KeyManager(keys_dir)
+
+    # Check if keys already exist
+    if km.keys_exist() and not force:
+        console.print("[yellow]⚠️  Warning: Keys already exist![/yellow]")
+        console.print(f"Location: {keys_dir}")
+        console.print("\n[red]Overwriting will make all encrypted data unrecoverable![/red]")
+        console.print("\nTo proceed anyway:")
+        console.print("  [cyan]sb key generate --force[/cyan]")
+        console.print("\nTo backup first:")
+        console.print(f"  [cyan]cp {keys_dir}/private_key.pem /secure/backup/[/cyan]")
+        return
+
+    # Get passphrase if requested
+    passphrase_str = None
+    if passphrase:
+        try:
+            passphrase_str = getpass.getpass("Enter passphrase: ")
+            confirm = getpass.getpass("Confirm passphrase: ")
+            if passphrase_str != confirm:
+                console.print("[red]✗ Error: Passphrases don't match[/red]")
+                console.print("Please try again.")
+                return
+        except (KeyboardInterrupt, EOFError):
+            console.print("\n[yellow]Cancelled.[/yellow]")
+            return
+
+    try:
+        # Generate keys
+        console.print(f"[cyan]Generating {bits}-bit RSA key pair...[/cyan]")
+        private_key, public_key = km.generate_key_pair(bits, passphrase_str)
+
+        # Save keys
+        km.save_keys(private_key, public_key, passphrase_str)
+
+        # Update .gitignore
+        modified = ensure_keys_in_gitignore(config.second_brain_dir)
+        if modified:
+            console.print("[green]✓[/green] Updated .gitignore to protect private keys")
+
+        # Get fingerprint
+        fingerprint = km.get_fingerprint(public_key)
+
+        # Show success
+        console.print("[green]✓ Keys generated successfully![/green]")
+        if passphrase:
+            console.print("[green]✓ Private key encrypted with passphrase[/green]")
+        console.print(f"\nPrivate key: {keys_dir}/private_key.pem (permissions: 600)")
+        console.print(f"Public key:  {keys_dir}/public_key.pem (permissions: 644)")
+        console.print(f"Fingerprint: {fingerprint}")
+
+        console.print("\n[yellow]⚠️  IMPORTANT: Backup your private key securely![/yellow]")
+        console.print("Without it, you cannot decrypt your data.")
+        console.print(f"\nLocation: {keys_dir}/private_key.pem")
+        console.print("Backup to: password manager, encrypted drive, or secure cloud storage")
+
+    except Exception as e:
+        console.print(f"[red]✗ Error generating keys: {e}[/red]")
+        raise
+
+
+@key.command("info")
+def key_info():
+    """Show encryption key information."""
+    from .crypto import KeyManager
+    import os
+
+    config = get_app_config()
+    keys_dir = config.second_brain_dir / "keys"
+    km = KeyManager(keys_dir)
+
+    # Check if keys exist
+    if not km.keys_exist():
+        console.print("[yellow]No encryption keys found.[/yellow]")
+        console.print("\nGenerate keys with:")
+        console.print("  [cyan]sb key generate[/cyan]")
+        console.print("\nThis will create a 4096-bit RSA key pair for encrypting")
+        console.print("sensitive information in your Second Brain.")
+        return
+
+    try:
+        # Load metadata
+        metadata = km.load_metadata()
+
+        console.print("[cyan]Encryption Keys[/cyan]\n")
+
+        if metadata:
+            console.print(f"Algorithm:   {metadata.get('algorithm', 'Unknown')}")
+            console.print(f"Fingerprint: {metadata.get('public_key_fingerprint', 'Unknown')}")
+
+            # Format created date in user's timezone
+            created_at = metadata.get('created_at', 'Unknown')
+            if created_at != 'Unknown':
+                from datetime import datetime
+                try:
+                    dt = datetime.fromisoformat(created_at)
+                    from .utils import datetime_utils
+                    local_dt = datetime_utils.to_local(dt)
+                    created_at = local_dt.strftime('%Y-%m-%d %H:%M:%S %Z')
+                except Exception:
+                    # Keep original if conversion fails
+                    pass
+
+            console.print(f"Created:     {created_at}")
+            console.print(f"Passphrase:  {'Yes' if metadata.get('has_passphrase') else 'No'}")
+        else:
+            console.print("[yellow]Metadata not found (keys exist but no .key_metadata.json)[/yellow]")
+
+        console.print(f"Location:    {keys_dir}\n")
+
+        # Check key files
+        private_exists = km.private_key_path.exists()
+        public_exists = km.public_key_path.exists()
+
+        if private_exists:
+            private_stat = os.stat(km.private_key_path)
+            private_perms = oct(private_stat.st_mode)[-3:]
+            console.print(f"Private key: [green]✓[/green] Found (permissions: {private_perms})")
+        else:
+            console.print(f"Private key: [red]✗[/red] Not found")
+
+        if public_exists:
+            public_stat = os.stat(km.public_key_path)
+            public_perms = oct(public_stat.st_mode)[-3:]
+            console.print(f"Public key:  [green]✓[/green] Found (permissions: {public_perms})")
+        else:
+            console.print(f"Public key:  [red]✗[/red] Not found")
+
+    except Exception as e:
+        console.print(f"[red]✗ Error reading key information: {e}[/red]")
+
+
+@cli.command("encrypt")
+@click.argument("text")
+@click.option("--output", type=click.Path(), help="Save to file instead of stdout")
+@click.option("--block", is_flag=True, help="Output as markdown encrypted block")
+def encrypt_text(text, output, block):
+    """Encrypt text."""
+    from .crypto import KeyManager, Encryptor, EncryptionError
+    import getpass
+
+    config = get_app_config()
+    keys_dir = config.second_brain_dir / "keys"
+    km = KeyManager(keys_dir)
+
+    # Check if keys exist
+    if not km.keys_exist():
+        console.print("[red]✗ Error: No encryption keys found[/red]")
+        console.print("\nGenerate keys with:")
+        console.print("  [cyan]sb key generate[/cyan]")
+        return
+
+    try:
+        encryptor = Encryptor(km)
+
+        # Encrypt
+        if block:
+            encrypted = encryptor.create_encrypted_block(text)
+        else:
+            encrypted = encryptor.encrypt(text)
+
+        # Output
+        if output:
+            from pathlib import Path
+            Path(output).write_text(encrypted)
+            console.print(f"[green]✓ Encrypted successfully![/green]")
+            console.print(f"\nSaved to: {output}")
+        else:
+            console.print("[green]✓ Encrypted successfully![/green]\n")
+            console.print(encrypted)
+            console.print("\n[dim]Copy this to your note or run:[/dim]")
+            console.print(f'  [cyan]sb decrypt "{encrypted[:50]}..."[/cyan]')
+
+    except EncryptionError as e:
+        console.print(f"[red]✗ Encryption failed: {e}[/red]")
+    except Exception as e:
+        console.print(f"[red]✗ Error: {e}[/red]")
+        raise
+
+
+@cli.command("decrypt")
+@click.argument("text", required=False)
+@click.option("--file", type=click.Path(exists=True), help="Read encrypted text from file")
+@click.option("--passphrase", is_flag=True, help="Prompt for key passphrase")
+def decrypt_text(text, file, passphrase):
+    """Decrypt encrypted text."""
+    from .crypto import KeyManager, Encryptor, EncryptionError
+    import getpass
+
+    config = get_app_config()
+    keys_dir = config.second_brain_dir / "keys"
+    km = KeyManager(keys_dir)
+
+    # Check if keys exist
+    if not km.keys_exist():
+        console.print("[red]✗ Error: No encryption keys found[/red]")
+        console.print("\nGenerate keys with:")
+        console.print("  [cyan]sb key generate[/cyan]")
+        return
+
+    # Get encrypted data
+    if file:
+        from pathlib import Path
+        encrypted_data = Path(file).read_text()
+    elif text:
+        encrypted_data = text
+    else:
+        console.print("[red]✗ Error: Provide TEXT or --file[/red]")
+        console.print("\nUsage:")
+        console.print('  [cyan]sb decrypt "v1:RSA-AES256-GCM:..."[/cyan]')
+        console.print("  [cyan]sb decrypt --file secret.txt[/cyan]")
+        return
+
+    # Get passphrase if requested
+    passphrase_str = None
+    if passphrase:
+        try:
+            passphrase_str = getpass.getpass("Enter passphrase: ")
+        except (KeyboardInterrupt, EOFError):
+            console.print("\n[yellow]Cancelled.[/yellow]")
+            return
+
+    try:
+        encryptor = Encryptor(km)
+
+        # Check if it's a markdown with encrypted blocks
+        if "<!-- ENCRYPTED:" in encrypted_data:
+            plaintext = encryptor.decrypt_markdown(encrypted_data, passphrase_str)
+        else:
+            plaintext = encryptor.decrypt(encrypted_data.strip(), passphrase_str)
+
+        console.print("[green]✓ Decrypted successfully![/green]\n")
+        console.print(plaintext)
+
+    except EncryptionError as e:
+        console.print(f"[red]✗ Decryption failed: {e}[/red]")
+        if "passphrase" in str(e).lower():
+            console.print("\n[yellow]Hint: Try with --passphrase flag if your key is protected[/yellow]")
+    except Exception as e:
+        console.print(f"[red]✗ Error: {e}[/red]")
+        raise
+
+
 def main():
     """Main CLI entry point."""
     cli()

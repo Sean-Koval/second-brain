@@ -35,8 +35,11 @@ class Config:
         1. force_global flag
         2. force_local flag
         3. SECOND_BRAIN_DIR environment variable
-        4. Existence of ~/.second-brain/ directory
-        5. Default to local (for backward compatibility)
+        4. Default to global (~/.second-brain) - recommended for most users
+
+        Local mode is only used when explicitly requested with force_local.
+        This ensures consistent behavior across different directories and
+        aligns with the centralized .beads/ database architecture.
         """
         if force_global:
             return True
@@ -47,13 +50,9 @@ class Config:
         if os.getenv("SECOND_BRAIN_DIR"):
             return True
 
-        # Check if global directory exists
-        global_dir = Path.home() / ".second-brain"
-        if global_dir.exists() and global_dir.is_dir():
-            return True
-
-        # Default to local for backward compatibility
-        return False
+        # Default to global - this is the recommended setup
+        # Users can still use local mode with --local flag if needed
+        return True
 
     def _get_second_brain_dir(self, force_global: bool, force_local: bool) -> Path:
         """Get the Second Brain home directory.

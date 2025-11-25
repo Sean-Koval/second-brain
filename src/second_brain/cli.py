@@ -121,6 +121,26 @@ def init(is_global, data_dir, beads, prefix):
         config.initialize_global_setup()
         init_db(str(config.db_path))
 
+        # Initialize Beads in the global directory
+        import subprocess
+        beads_dir = config.second_brain_dir / ".beads"
+        if not beads_dir.exists():
+            console.print("[bold]Initializing Beads for epic/issue tracking...[/bold]")
+            try:
+                # Change to second-brain directory and run bd init
+                result = subprocess.run(
+                    ["bd", "init", "--prefix", prefix],
+                    cwd=str(config.second_brain_dir),
+                    capture_output=True,
+                    text=True
+                )
+                if result.returncode == 0:
+                    console.print("[green]✓[/green] Beads initialized!")
+                else:
+                    console.print("[yellow]⚠[/yellow] Beads initialization skipped (bd command not available)")
+            except FileNotFoundError:
+                console.print("[yellow]⚠[/yellow] Beads not installed. Install with: uv pip install beads-mcp")
+
         # Create .gitignore
         gitignore_path = config.second_brain_dir / ".gitignore"
         if not gitignore_path.exists():
@@ -459,7 +479,7 @@ def task_add(title, project, description, priority, with_issue, issue_id):
             import asyncio
 
             config = get_app_config()
-            client = get_beads_client(str(config.data_dir))
+            client = get_beads_client()
 
             if not client:
                 console.print(
@@ -888,7 +908,7 @@ def epic_create(title, description, priority, labels):
     import asyncio
 
     config = get_app_config()
-    client = get_beads_client(str(config.data_dir))
+    client = get_beads_client()
 
     if not client:
         console.print("[red]Error: Beads integration not available. Install with: uv pip install beads-mcp[/red]")
@@ -926,7 +946,7 @@ def epic_list(status, limit):
     import asyncio
 
     config = get_app_config()
-    client = get_beads_client(str(config.data_dir))
+    client = get_beads_client()
 
     if not client:
         console.print("[red]Error: Beads integration not available. Install with: uv pip install beads-mcp[/red]")
@@ -1000,7 +1020,7 @@ def issue_create(title, description, issue_type, priority, epic, blocks, labels,
     import asyncio
 
     config = get_app_config()
-    client = get_beads_client(str(config.data_dir))
+    client = get_beads_client()
 
     if not client:
         console.print("[red]Error: Beads integration not available. Install with: uv pip install beads-mcp[/red]")
@@ -1099,7 +1119,7 @@ def issue_create_with_project(title, description, priority, labels, jira_project
     import asyncio
 
     config = get_app_config()
-    client = get_beads_client(str(config.data_dir))
+    client = get_beads_client()
 
     if not client:
         console.print("[red]Error: Beads integration not available. Install with: uv pip install beads-mcp[/red]")
@@ -1185,7 +1205,7 @@ def issue_update(issue_id, title, description, status, priority):
     import asyncio
 
     config = get_app_config()
-    client = get_beads_client(str(config.data_dir))
+    client = get_beads_client()
 
     if not client:
         console.print("[red]Error: Beads integration not available. Install with: uv pip install beads-mcp[/red]")
@@ -1222,7 +1242,7 @@ def issue_close(issue_id, reason):
     import asyncio
 
     config = get_app_config()
-    client = get_beads_client(str(config.data_dir))
+    client = get_beads_client()
 
     if not client:
         console.print("[red]Error: Beads integration not available. Install with: uv pip install beads-mcp[/red]")
@@ -1248,7 +1268,7 @@ def issue_show(issue_id):
     import asyncio
 
     config = get_app_config()
-    client = get_beads_client(str(config.data_dir))
+    client = get_beads_client()
 
     if not client:
         console.print("[red]Error: Beads integration not available. Install with: uv pip install beads-mcp[/red]")
@@ -1308,7 +1328,7 @@ def issue_list(status, issue_type, priority, limit):
     import asyncio
 
     config = get_app_config()
-    client = get_beads_client(str(config.data_dir))
+    client = get_beads_client()
 
     if not client:
         console.print("[red]Error: Beads integration not available. Install with: uv pip install beads-mcp[/red]")
@@ -1375,7 +1395,7 @@ def issue_add_dependency(issue_id, depends_on_id, dep_type):
     import asyncio
 
     config = get_app_config()
-    client = get_beads_client(str(config.data_dir))
+    client = get_beads_client()
 
     if not client:
         console.print("[red]Error: Beads integration not available. Install with: uv pip install beads-mcp[/red]")
@@ -1414,7 +1434,7 @@ def issue_ready(limit, priority):
     import asyncio
 
     config = get_app_config()
-    client = get_beads_client(str(config.data_dir))
+    client = get_beads_client()
 
     if not client:
         console.print("[red]Error: Beads integration not available. Install with: uv pip install beads-mcp[/red]")
@@ -1465,7 +1485,7 @@ def issue_stats():
     import asyncio
 
     config = get_app_config()
-    client = get_beads_client(str(config.data_dir))
+    client = get_beads_client()
 
     if not client:
         console.print("[red]Error: Beads integration not available. Install with: uv pip install beads-mcp[/red]")
@@ -1758,6 +1778,298 @@ def decrypt_text(text, file, passphrase):
     except Exception as e:
         console.print(f"[red]✗ Error: {e}[/red]")
         raise
+
+
+@cli.command("mark-sensitive")
+@click.option("--note-id", type=int, help="Note ID to mark as sensitive")
+@click.option("--log-id", type=int, help="Work log entry ID to mark as sensitive")
+@click.option("--passphrase", is_flag=True, help="Prompt for key passphrase")
+def mark_sensitive(note_id, log_id, passphrase):
+    """Mark a note or work log entry as sensitive (encrypts content)."""
+    from .crypto import KeyManager, Encryptor, EncryptionError
+    from .db.operations import NoteOps, WorkLogOps
+    from .storage.markdown import MarkdownStorage
+    import getpass
+    import frontmatter
+    from pathlib import Path
+
+    config = get_app_config()
+    keys_dir = config.second_brain_dir / "keys"
+    km = KeyManager(keys_dir)
+
+    # Check if keys exist
+    if not km.keys_exist():
+        console.print("[red]✗ Error: No encryption keys found[/red]")
+        console.print("\nGenerate keys with:")
+        console.print("  [cyan]sb key generate[/cyan]")
+        return
+
+    # Validate input
+    if not note_id and not log_id:
+        console.print("[red]✗ Error: Provide --note-id or --log-id[/red]")
+        console.print("\nUsage:")
+        console.print("  [cyan]sb mark-sensitive --note-id 5[/cyan]")
+        console.print("  [cyan]sb mark-sensitive --log-id 10[/cyan]")
+        return
+
+    if note_id and log_id:
+        console.print("[red]✗ Error: Provide only one of --note-id or --log-id[/red]")
+        return
+
+    # Get passphrase if requested
+    passphrase_str = None
+    if passphrase:
+        try:
+            passphrase_str = getpass.getpass("Enter passphrase: ")
+        except (KeyboardInterrupt, EOFError):
+            console.print("\n[yellow]Cancelled.[/yellow]")
+            return
+
+    session, engine = get_db_session()
+    try:
+        encryptor = Encryptor(km)
+
+        if note_id:
+            # Handle note encryption
+            note = NoteOps.get_by_id(session, note_id)
+            if not note:
+                console.print(f"[red]✗ Error: Note #{note_id} not found[/red]")
+                return
+
+            # Check if already encrypted
+            if "<!-- ENCRYPTED:" in note.content:
+                console.print(f"[yellow]⚠ Note #{note_id} appears to already contain encrypted content[/yellow]")
+                console.print("Proceeding will encrypt it again...")
+
+            # Read markdown file
+            markdown_path = Path(note.markdown_path)
+            if not markdown_path.exists():
+                console.print(f"[red]✗ Error: Markdown file not found: {markdown_path}[/red]")
+                return
+
+            with open(markdown_path, 'r', encoding='utf-8') as f:
+                post = frontmatter.load(f)
+
+            # Encrypt the content
+            console.print(f"[cyan]Encrypting note #{note_id}: {note.title}[/cyan]")
+            encrypted_block = encryptor.create_encrypted_block(note.content)
+
+            # Update frontmatter
+            post.metadata['is_sensitive'] = True
+            post.metadata['encrypted'] = True
+            post.metadata['updated_at'] = datetime.utcnow().isoformat()
+
+            # Update content with encrypted block
+            post.content = f"**Note:** This note contains encrypted sensitive information.\n\n{encrypted_block}"
+
+            # Save markdown file
+            with open(markdown_path, 'w', encoding='utf-8') as f:
+                f.write(frontmatter.dumps(post))
+
+            # Update database record
+            note.content = encrypted_block
+            note.updated_at = datetime.utcnow()
+            session.commit()
+
+            console.print(f"[green]✓ Note #{note_id} marked as sensitive and encrypted![/green]")
+            console.print(f"\nMarkdown file updated: {markdown_path}")
+            console.print("[yellow]⚠ Sensitive content is now encrypted. Use 'sb decrypt' to view.[/yellow]")
+
+        elif log_id:
+            # Handle work log entry encryption
+            from .db.models import WorkLogEntry
+
+            entry = session.get(WorkLogEntry, log_id)
+            if not entry:
+                console.print(f"[red]✗ Error: Work log entry #{log_id} not found[/red]")
+                return
+
+            # Check if already encrypted
+            if encryptor.is_encrypted(entry.entry_text):
+                console.print(f"[yellow]⚠ Work log entry #{log_id} is already encrypted[/yellow]")
+                return
+
+            # Get the work log to update markdown file
+            work_log = entry.work_log
+            markdown_path = Path(work_log.markdown_path)
+
+            if not markdown_path.exists():
+                console.print(f"[red]✗ Error: Work log file not found: {markdown_path}[/red]")
+                return
+
+            # Encrypt the entry text
+            console.print(f"[cyan]Encrypting work log entry #{log_id}...[/cyan]")
+            encrypted_text = encryptor.encrypt(entry.entry_text, passphrase_str)
+
+            # Update database
+            entry.entry_text = encrypted_text
+            session.commit()
+
+            # Update markdown file
+            with open(markdown_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+            # Read as frontmatter doc
+            post = frontmatter.loads(content)
+
+            # Mark as having sensitive content in frontmatter
+            if 'has_encrypted_entries' not in post.metadata:
+                post.metadata['has_encrypted_entries'] = True
+                post.metadata['updated_at'] = datetime.utcnow().isoformat()
+
+                with open(markdown_path, 'w', encoding='utf-8') as f:
+                    f.write(frontmatter.dumps(post))
+
+            console.print(f"[green]✓ Work log entry #{log_id} marked as sensitive and encrypted![/green]")
+            console.print(f"\nWork log file: {markdown_path}")
+            console.print("[yellow]⚠ Entry text is now encrypted. Use 'sb log show' to view (will auto-decrypt).[/yellow]")
+
+    except EncryptionError as e:
+        console.print(f"[red]✗ Encryption failed: {e}[/red]")
+    except Exception as e:
+        console.print(f"[red]✗ Error: {e}[/red]")
+        raise
+    finally:
+        engine.dispose()
+
+
+@cli.command("install-hooks")
+@click.option("--check", is_flag=True, help="Check hook installation status")
+@click.option("--force", is_flag=True, help="Reinstall hooks even if exist")
+def install_hooks(check, force):
+    """Install git hooks for Second Brain validation."""
+    import os
+    import stat
+    from datetime import datetime
+    from pathlib import Path
+
+    config = get_app_config()
+    git_dir = config.second_brain_dir / '.git'
+    hooks_dir = git_dir / 'hooks'
+    pre_commit_hook = hooks_dir / 'pre-commit'
+
+    # Check if git repository exists
+    if not git_dir.exists():
+        console.print("[red]✗ Error: Not a git repository[/red]")
+        console.print(f"\n{config.second_brain_dir} is not a git repository")
+        console.print("\nTo initialize:")
+        console.print(f"  [cyan]cd {config.second_brain_dir}[/cyan]")
+        console.print("  [cyan]git init[/cyan]")
+        return
+
+    # Check status mode
+    if check:
+        console.print("🔍 Checking hook installation status...\n")
+
+        if pre_commit_hook.exists():
+            stat_info = pre_commit_hook.stat()
+            is_executable = bool(stat_info.st_mode & stat.S_IXUSR)
+
+            console.print("[green]✓[/green] Pre-commit hook: Installed")
+            console.print(f"  Location: {pre_commit_hook}")
+
+            # Show permissions
+            mode = oct(stat_info.st_mode)[-3:]
+            console.print(f"  Permissions: {mode} {'(executable)' if is_executable else '(not executable!)'}")
+
+            # Show last modified
+            mtime = datetime.fromtimestamp(stat_info.st_mtime)
+            console.print(f"  Last modified: {mtime.strftime('%Y-%m-%d %H:%M:%S')}")
+
+            if not is_executable:
+                console.print("\n[yellow]⚠ Warning: Hook is not executable[/yellow]")
+                console.print("Run: [cyan]sb install-hooks --force[/cyan]")
+            else:
+                console.print("\n[green]Hook is working correctly ✓[/green]")
+        else:
+            console.print("[yellow]✗[/yellow] Pre-commit hook: Not installed")
+            console.print(f"  Location: {pre_commit_hook}")
+            console.print("\nTo install:")
+            console.print("  [cyan]sb install-hooks[/cyan]")
+
+        return
+
+    # Installation mode
+    console.print("🔧 Installing git hooks...\n")
+
+    # Check if hook already exists
+    if pre_commit_hook.exists() and not force:
+        console.print("[yellow]✓ Pre-commit hook already installed[/yellow]\n")
+        console.print(f"Location: {pre_commit_hook}")
+        console.print("\nTo reinstall: [cyan]sb install-hooks --force[/cyan]")
+        console.print("To check status: [cyan]sb install-hooks --check[/cyan]")
+        return
+
+    # Create hooks directory if needed
+    hooks_dir.mkdir(parents=True, exist_ok=True)
+
+    # Get hook template
+    from . import hooks
+    hook_module_path = Path(hooks.__file__).parent / 'pre_commit.py'
+
+    if not hook_module_path.exists():
+        console.print("[red]✗ Error: Hook template not found[/red]")
+        console.print(f"Expected: {hook_module_path}")
+        return
+
+    # Read template
+    hook_content = hook_module_path.read_text()
+
+    # Get the Python interpreter path (use same Python as sb command)
+    python_path = sys.executable
+
+    # Write hook with proper shebang
+    try:
+        with open(pre_commit_hook, 'w') as f:
+            # Write shebang using the same Python as second-brain installation
+            f.write(f'#!{python_path}\n')
+
+            # Write the rest of the hook, skipping any existing shebang
+            lines = hook_content.split('\n')
+            if lines[0].startswith('#!'):
+                # Skip the first line if it's a shebang
+                hook_content = '\n'.join(lines[1:])
+
+            f.write(hook_content)
+
+        # Make executable
+        pre_commit_hook.chmod(
+            pre_commit_hook.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
+        )
+    except PermissionError:
+        console.print("[red]✗ Error: Cannot write to hooks directory[/red]")
+        console.print(f"Permission denied: {hooks_dir}")
+        return
+    except Exception as e:
+        console.print(f"[red]✗ Error installing hook: {e}[/red]")
+        return
+
+    # Verify
+    if not pre_commit_hook.exists():
+        console.print("[red]✗ Failed to install hook[/red]")
+        return
+
+    stat_info = pre_commit_hook.stat()
+    mode = oct(stat_info.st_mode)[-3:]
+
+    console.print("[green]✓ Pre-commit hook installed successfully![/green]\n")
+    console.print(f"Location: {pre_commit_hook}")
+    console.print(f"Permissions: -{mode}\n")
+
+    console.print("What it validates:")
+    console.print("  • No unencrypted API keys, passwords, or secrets")
+    console.print("  • No private key files committed")
+    console.print("  • Files marked as sensitive are encrypted")
+    console.print("  • Proper encryption format\n")
+
+    console.print("Test the hook:")
+    console.print(f"  [cyan]cd {config.second_brain_dir}[/cyan]")
+    console.print("  [cyan]# Make some changes[/cyan]")
+    console.print("  [cyan]git add .[/cyan]")
+    console.print('  [cyan]git commit -m "test"[/cyan]\n')
+
+    console.print("Bypass validation (not recommended):")
+    console.print("  [cyan]git commit --no-verify[/cyan]")
 
 
 def main():

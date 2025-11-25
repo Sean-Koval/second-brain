@@ -41,15 +41,20 @@ class BeadsIntegration:
         """Initialize Beads integration.
 
         Args:
-            project_dir: Directory where .beads database lives (auto-detected if None)
+            project_dir: Directory where .beads database lives (defaults to ~/.second-brain)
         """
         if not BEADS_AVAILABLE:
             raise ImportError(
                 "beads-mcp is not installed. Install with: uv pip install beads-mcp"
             )
 
-        self.project_dir = Path(project_dir) if project_dir else Path.cwd()
-        self.client = BdClient()
+        # Always use ~/.second-brain as the central beads location
+        # unless explicitly overridden (for team collaboration, etc.)
+        self.project_dir = Path(project_dir) if project_dir else Path.home() / ".second-brain"
+
+        # Tell BdClient to use the .beads directory in our project_dir
+        beads_dir = str(self.project_dir / ".beads")
+        self.client = BdClient(beads_dir=beads_dir)
 
     async def is_available(self) -> bool:
         """Check if bd CLI is available."""

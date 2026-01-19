@@ -1598,6 +1598,97 @@ def key_generate(bits, passphrase, force):
         raise
 
 
+@key.command("export")
+@click.option("--public", type=click.Path(), help="Export public key to file (or stdout)")
+@click.option("--private", type=click.Path(), help="Export private key to file (DANGEROUS)")
+@click.option("--format", type=click.Choice(["pem", "ssh"]), default="pem", help="Export format")
+def key_export(public, private, format):
+    """Export encryption keys."""
+    from .crypto import KeyManager
+    from cryptography.hazmat.primitives import serialization
+
+    config = get_app_config()
+    keys_dir = config.second_brain_dir / "keys"
+    km = KeyManager(keys_dir)
+
+    # Check if keys exist
+    if not km.keys_exist():
+        console.print("[red]✗ Error: No encryption keys found[/red]")
+        console.print("\nGenerate keys with:")
+        console.print("  [cyan]sb key generate[/cyan]")
+        return
+
+    # Export public key
+    if public is not None or (public is None and private is None):
+        try:
+            public_key = km.load_public_key()
+
+            if format == "pem":
+                key_bytes = public_key.public_bytes(
+                    encoding=serialization.Encoding.PEM,
+                    format=serialization.PublicFormat.SubjectPublicKeyInfo
+                )
+            else:  # ssh
+                key_bytes = public_key.public_bytes(
+                    encoding=serialization.Encoding.OpenSSH,
+                    format=serialization.PublicFormat.OpenSSH
+                )
+
+            key_str = key_bytes.decode('utf-8')
+
+            # Output to file or stdout
+            if public:
+                from pathlib import Path
+                Path(public).write_text(key_str)
+                console.print(f"[green]✓ Public key exported to: {public}[/green]")
+            else:
+                console.print("[green]Public Key:[/green]\n")
+                console.print(key_str)
+
+        except Exception as e:
+            console.print(f"[red]✗ Error exporting public key: {e}[/red]")
+            return
+
+    # Export private key (with scary warnings)
+    if private:
+        console.print("\n[red]⚠️  WARNING: EXPORTING PRIVATE KEY ⚠️[/red]")
+        console.print("[yellow]This key can decrypt ALL your encrypted data![/yellow]")
+        console.print("\nOnly export to:")
+        console.print("  • Encrypted backup drive")
+        console.print("  • Password manager")
+        console.print("  • Secure offline storage")
+        console.print("\n[red]NEVER share or commit to version control![/red]")
+
+        confirm = click.confirm("\nAre you sure you want to export the private key?", default=False)
+        if not confirm:
+            console.print("[yellow]Cancelled.[/yellow]")
+            return
+
+        try:
+            # Check if key is encrypted
+            metadata = km.load_metadata()
+            has_passphrase = metadata.get('has_passphrase', False) if metadata else False
+
+            # Read private key file directly (preserve encryption)
+            private_key_content = km.private_key_path.read_text()
+
+            from pathlib import Path
+            Path(private).write_text(private_key_content)
+
+            console.print(f"\n[green]✓ Private key exported to: {private}[/green]")
+            if has_passphrase:
+                console.print("[green]✓ Key remains passphrase-protected[/green]")
+            else:
+                console.print("[red]⚠️  Key is NOT passphrase-protected![/red]")
+            console.print("\n[yellow]Remember to:[/yellow]")
+            console.print("  1. Store in secure location")
+            console.print("  2. Encrypt the backup storage")
+            console.print("  3. Delete from insecure locations")
+
+        except Exception as e:
+            console.print(f"[red]✗ Error exporting private key: {e}[/red]")
+
+
 @key.command("info")
 def key_info():
     """Show encryption key information."""

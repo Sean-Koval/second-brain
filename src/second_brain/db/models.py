@@ -126,6 +126,8 @@ class Note(Base):
     project_id: Mapped[Optional[int]] = mapped_column(ForeignKey("projects.id"), nullable=True)
     task_id: Mapped[Optional[int]] = mapped_column(ForeignKey("tasks.id"), nullable=True)
     tags: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # Comma-separated
+    is_sensitive: Mapped[bool] = mapped_column(Integer, default=0)  # SQLite uses INTEGER for boolean
+    encrypted: Mapped[bool] = mapped_column(Integer, default=0)  # SQLite uses INTEGER for boolean
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow

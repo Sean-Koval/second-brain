@@ -1889,6 +1889,113 @@ def key_info():
         console.print(f"[red]✗ Error reading key information: {e}[/red]")
 
 
+
+# ============================================================================
+# Hook Commands
+# ============================================================================
+
+
+@cli.group()
+def hook():
+    """Manage git hooks for encryption validation."""
+    pass
+
+
+@hook.command("install")
+@click.option("--force", is_flag=True, help="Overwrite existing hook")
+@click.option("--path", type=click.Path(exists=True), help="Path to git repository")
+def hook_install(force, path):
+    """Install pre-commit hook to validate encryption.
+    
+    The hook will scan staged files for:
+    - Unencrypted sensitive data (API keys, passwords, tokens)
+    - Private keys being committed
+    - Notes marked sensitive but not encrypted
+    """
+    from .crypto.hooks import install_hook
+    from pathlib import Path
+    
+    repo_path = Path(path) if path else None
+    success, message = install_hook(repo_path, force)
+    
+    if success:
+        console.print(f"[green]{message}[/green]")
+        console.print("\nThe hook will now run before each commit to check for:")
+        console.print("  • Unencrypted API keys and tokens")
+        console.print("  • Private keys being committed")
+        console.print("  • Sensitive notes not properly encrypted")
+        console.print("\nTo bypass: git commit --no-verify")
+    else:
+        console.print(f"[red]{message}[/red]")
+
+
+@hook.command("uninstall")
+@click.option("--path", type=click.Path(exists=True), help="Path to git repository")
+def hook_uninstall(path):
+    """Remove the pre-commit hook."""
+    from .crypto.hooks import uninstall_hook
+    from pathlib import Path
+    
+    repo_path = Path(path) if path else None
+    success, message = uninstall_hook(repo_path)
+    
+    if success:
+        console.print(f"[green]{message}[/green]")
+    else:
+        console.print(f"[yellow]{message}[/yellow]")
+
+
+@hook.command("check")
+@click.option("--verbose", "-v", is_flag=True, help="Show detailed output")
+def hook_check(verbose):
+    """Run the encryption check manually.
+    
+    This runs the same checks as the pre-commit hook.
+    Useful for testing before committing.
+    """
+    from .crypto.hooks import run_pre_commit_check
+    import sys
+    
+    passed, messages = run_pre_commit_check(verbose=verbose)
+    
+    for msg in messages:
+        if msg.startswith("✅"):
+            console.print(f"[green]{msg}[/green]")
+        elif msg.startswith("❌") or msg.startswith("⚠️"):
+            console.print(f"[red]{msg}[/red]")
+        else:
+            console.print(msg)
+    
+    if not passed:
+        sys.exit(1)
+
+
+@hook.command("status")
+@click.option("--path", type=click.Path(exists=True), help="Path to git repository")
+def hook_status(path):
+    """Check if pre-commit hook is installed."""
+    from pathlib import Path
+    
+    repo_path = Path(path) if path else Path.cwd()
+    hook_path = repo_path / ".git" / "hooks" / "pre-commit"
+    
+    if not (repo_path / ".git").exists():
+        console.print(f"[yellow]Not a git repository: {repo_path}[/yellow]")
+        return
+    
+    if hook_path.exists():
+        content = hook_path.read_text()
+        if "Second Brain" in content:
+            console.print("[green]✓ Second Brain pre-commit hook is installed[/green]")
+            console.print(f"  Location: {hook_path}")
+        else:
+            console.print("[yellow]⚠ Pre-commit hook exists but is not from Second Brain[/yellow]")
+    else:
+        console.print("[yellow]✗ Pre-commit hook is not installed[/yellow]")
+        console.print("\nInstall with:")
+        console.print("  [cyan]sb hook install[/cyan]")
+
+
 @cli.command("encrypt")
 @click.argument("text")
 @click.option("--output", type=click.Path(), help="Save to file instead of stdout")

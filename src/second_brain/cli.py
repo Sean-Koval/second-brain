@@ -772,6 +772,135 @@ def note_show(note_id):
         session.close()
 
 
+@note.command("mark-sensitive")
+@click.argument("note_id", type=int)
+@click.option("--encrypt", is_flag=True, help="Encrypt the note content immediately")
+@click.option("--unmark", is_flag=True, help="Remove sensitive marking (does not decrypt)")
+def note_mark_sensitive(note_id, encrypt, unmark):
+    """Mark a note as containing sensitive data.
+    
+    Sensitive notes can be encrypted before syncing to Git.
+    Use --encrypt to encrypt the note content immediately.
+    Use --unmark to remove the sensitive flag (note remains encrypted if it was).
+    """
+    session, engine = get_db_session()
+    try:
+        note = NoteOps.get_by_id(session, note_id)
+        if not note:
+            console.print(f"[red]Error: Note #{note_id} not found[/red]")
+            return
+
+        if unmark:
+            # Remove sensitive marking
+            NoteOps.update(session, note, is_sensitive=False)
+            console.print(f"[green]✓ Note #{note_id} is no longer marked as sensitive[/green]")
+            if note.encrypted:
+                console.print("[yellow]Note: Content remains encrypted. Use 'sb note decrypt' to decrypt.[/yellow]")
+            return
+
+        # Mark as sensitive
+        NoteOps.update(session, note, is_sensitive=True)
+        console.print(f"[green]✓ Note #{note_id} marked as sensitive[/green]")
+
+        if encrypt:
+            # Encrypt the note content
+            if note.encrypted:
+                console.print("[yellow]Note is already encrypted[/yellow]")
+                return
+
+            try:
+                from .crypto import KeyManager, Encryptor
+                config = get_app_config()
+                keys_dir = config.second_brain_dir / "keys"
+                km = KeyManager(keys_dir)
+
+                if not km.keys_exist():
+                    console.print("[red]✗ No encryption keys found[/red]")
+                    console.print("Generate keys with: [cyan]sb key generate[/cyan]")
+                    return
+
+                encryptor = Encryptor(km)
+                encrypted_content = encryptor.create_encrypted_block(note.content)
+                
+                # Update note with encrypted content
+                NoteOps.update(session, note, content=encrypted_content, encrypted=True)
+                
+                # Also update the markdown file
+                if note.markdown_path:
+                    from pathlib import Path
+                    md_path = Path(note.markdown_path)
+                    if md_path.exists():
+                        md_path.write_text(encrypted_content)
+
+                console.print("[green]✓ Note content encrypted[/green]")
+
+            except Exception as e:
+                console.print(f"[red]✗ Encryption failed: {e}[/red]")
+                return
+        else:
+            console.print("[dim]Tip: Use --encrypt to encrypt the note content now[/dim]")
+
+    finally:
+        session.close()
+
+
+@note.command("decrypt")
+@click.argument("note_id", type=int)
+@click.option("--passphrase", is_flag=True, help="Prompt for key passphrase")
+def note_decrypt(note_id, passphrase):
+    """Decrypt an encrypted note.
+    
+    Decrypts the note content and updates both database and markdown file.
+    """
+    session, engine = get_db_session()
+    try:
+        note = NoteOps.get_by_id(session, note_id)
+        if not note:
+            console.print(f"[red]Error: Note #{note_id} not found[/red]")
+            return
+
+        if not note.encrypted:
+            console.print("[yellow]Note is not encrypted[/yellow]")
+            return
+
+        try:
+            from .crypto import KeyManager, Encryptor
+            config = get_app_config()
+            keys_dir = config.second_brain_dir / "keys"
+            km = KeyManager(keys_dir)
+
+            if not km.keys_exist():
+                console.print("[red]✗ No encryption keys found[/red]")
+                return
+
+            # Get passphrase if needed
+            pp = None
+            if passphrase:
+                pp = click.prompt("Enter key passphrase", hide_input=True)
+
+            encryptor = Encryptor(km)
+            decrypted_content = encryptor.decrypt_markdown(note.content, passphrase=pp)
+            
+            # Update note with decrypted content
+            NoteOps.update(session, note, content=decrypted_content, encrypted=False)
+            
+            # Also update the markdown file
+            if note.markdown_path:
+                from pathlib import Path
+                md_path = Path(note.markdown_path)
+                if md_path.exists():
+                    md_path.write_text(decrypted_content)
+
+            console.print(f"[green]✓ Note #{note_id} decrypted successfully[/green]")
+
+        except Exception as e:
+            console.print(f"[red]✗ Decryption failed: {e}[/red]")
+            return
+
+    finally:
+        session.close()
+
+
 # Report commands
 @cli.group()
 def report():

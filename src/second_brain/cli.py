@@ -2399,6 +2399,322 @@ def install_hooks(check, force):
     console.print("  [cyan]git commit --no-verify[/cyan]")
 
 
+# Journal commands
+@cli.group()
+def journal():
+    """Daily journal commands."""
+    pass
+
+
+@journal.command("add")
+@click.argument("text")
+@click.option("--tags", help="Comma-separated tags")
+@click.option("--project", "-p", help="Project slug to link to")
+@click.option("--task-id", type=int, help="Task ID to link to")
+@click.option("--date", "-d", "date_str", help="Date override (YYYY-MM-DD)")
+def journal_add(text, tags, project, task_id, date_str):
+    """Add an entry to today's journal."""
+    config = get_app_config()
+    session, engine = get_db_session()
+    try:
+        indexer = StorageIndexer(session, str(config.data_dir))
+
+        if date_str:
+            date = datetime.strptime(date_str, "%Y-%m-%d")
+        else:
+            date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+
+        project_id = None
+        if project:
+            proj = ProjectOps.get_by_slug(session, project)
+            if not proj:
+                console.print(f"[red]Error: Project '{project}' not found[/red]")
+                return
+            project_id = proj.id
+
+        tag_list = [t.strip() for t in tags.split(",")] if tags else None
+
+        journal_obj, entry = indexer.add_journal_entry(
+            date=date,
+            entry_text=text,
+            tags=tag_list,
+            project_id=project_id,
+            task_id=task_id,
+        )
+
+        console.print(f"[green]✓[/green] Journal entry added (#{entry.id})")
+        console.print(f"  Date: {date.strftime('%Y-%m-%d')}")
+        console.print(f"  Time: {entry.timestamp.strftime('%H:%M')}")
+        if tag_list:
+            console.print(f"  Tags: {', '.join(tag_list)}")
+    finally:
+        session.close()
+
+
+@journal.command("body")
+@click.argument("text")
+@click.option("--date", "-d", "date_str", help="Date override (YYYY-MM-DD)")
+def journal_body(text, date_str):
+    """Set/update the day's scratchpad body."""
+    config = get_app_config()
+    session, engine = get_db_session()
+    try:
+        indexer = StorageIndexer(session, str(config.data_dir))
+
+        if date_str:
+            date = datetime.strptime(date_str, "%Y-%m-%d")
+        else:
+            date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+
+        journal_obj = indexer.update_journal(date=date, body=text)
+        console.print(f"[green]✓[/green] Journal scratchpad updated for {date.strftime('%Y-%m-%d')}")
+    finally:
+        session.close()
+
+
+@journal.command("summary")
+@click.argument("text")
+@click.option("--date", "-d", "date_str", help="Date override (YYYY-MM-DD)")
+def journal_summary(text, date_str):
+    """Set today's end-of-day summary."""
+    config = get_app_config()
+    session, engine = get_db_session()
+    try:
+        indexer = StorageIndexer(session, str(config.data_dir))
+
+        if date_str:
+            date = datetime.strptime(date_str, "%Y-%m-%d")
+        else:
+            date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+
+        journal_obj = indexer.update_journal(date=date, summary=text)
+        console.print(f"[green]✓[/green] Journal summary set for {date.strftime('%Y-%m-%d')}")
+    finally:
+        session.close()
+
+
+@journal.command("show")
+@click.option("--date", "-d", "date_str", help="Date (YYYY-MM-DD), defaults to today")
+def journal_show(date_str):
+    """Show today's journal (or specified date)."""
+    from .db.operations import JournalOps
+    session, engine = get_db_session()
+    try:
+        if date_str:
+            date = datetime.strptime(date_str, "%Y-%m-%d")
+        else:
+            date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+
+        journal_obj = JournalOps.get_by_date(session, date)
+        if not journal_obj:
+            console.print(f"[yellow]No journal found for {date.strftime('%Y-%m-%d')}[/yellow]")
+            return
+
+        console.print(f"\n[bold cyan]Journal - {date.strftime('%Y-%m-%d')}[/bold cyan]")
+        if journal_obj.title:
+            console.print(f"[bold]{journal_obj.title}[/bold]")
+        if journal_obj.tags:
+            console.print(f"Tags: {journal_obj.tags}")
+
+        if journal_obj.body:
+            console.print(f"\n[bold]Scratchpad[/bold]")
+            console.print(journal_obj.body)
+
+        if journal_obj.summary:
+            console.print(f"\n[bold]Summary[/bold]")
+            console.print(journal_obj.summary)
+
+        if journal_obj.entries:
+            console.print(f"\n[bold]Entries ({len(journal_obj.entries)})[/bold]\n")
+            for entry in sorted(journal_obj.entries, key=lambda e: e.timestamp):
+                time_str = entry.timestamp.strftime("%H:%M")
+                tags_str = f" [{entry.tags}]" if entry.tags else ""
+                project_str = f" ({entry.project.name})" if entry.project else ""
+                console.print(f"  [cyan]{time_str}[/cyan]{tags_str}{project_str} [dim]#{entry.id}[/dim]")
+                console.print(f"    {entry.entry_text}")
+        else:
+            console.print("\n[dim]No entries yet.[/dim]")
+
+        console.print(f"\nFile: {journal_obj.markdown_path}")
+    finally:
+        session.close()
+
+
+@journal.command("list")
+@click.option("--days", type=int, default=7, help="Number of recent days to show")
+@click.option("--tags", help="Filter by tags (comma-separated)")
+def journal_list(days, tags):
+    """List recent journals."""
+    from .db.operations import JournalOps
+    session, engine = get_db_session()
+    try:
+        if tags:
+            tag_list = [t.strip() for t in tags.split(",")]
+            journals = JournalOps.list_by_tags(session, tag_list)
+        else:
+            journals = JournalOps.list_recent(session, days)
+
+        if not journals:
+            console.print("[yellow]No journals found[/yellow]")
+            return
+
+        table = Table(title="Journals")
+        table.add_column("Date", style="cyan")
+        table.add_column("Title", style="bold")
+        table.add_column("Entries")
+        table.add_column("Tags")
+        table.add_column("Summary")
+
+        for j in journals:
+            entry_count = len(j.entries) if j.entries else 0
+            summary_snippet = (j.summary[:40] + "...") if j.summary and len(j.summary) > 40 else (j.summary or "-")
+            table.add_row(
+                j.date.strftime("%Y-%m-%d"),
+                j.title or "-",
+                str(entry_count),
+                j.tags or "-",
+                summary_snippet,
+            )
+
+        console.print(table)
+    finally:
+        session.close()
+
+
+@journal.command("edit")
+@click.argument("entry_id", type=int)
+@click.option("--text", "-t", help="New entry text")
+@click.option("--tags", help="New tags (comma-separated)")
+def journal_edit(entry_id, text, tags):
+    """Update a journal entry."""
+    config = get_app_config()
+    session, engine = get_db_session()
+    try:
+        indexer = StorageIndexer(session, str(config.data_dir))
+
+        tag_list = [t.strip() for t in tags.split(",")] if tags else None
+
+        entry = indexer.update_journal_entry(
+            entry_id=entry_id,
+            entry_text=text,
+            tags=tag_list,
+        )
+
+        if not entry:
+            console.print(f"[red]Error: Entry #{entry_id} not found[/red]")
+            return
+
+        console.print(f"[green]✓[/green] Entry #{entry_id} updated")
+    finally:
+        session.close()
+
+
+@journal.command("delete")
+@click.argument("entry_id", type=int)
+def journal_delete(entry_id):
+    """Delete a journal entry."""
+    config = get_app_config()
+    session, engine = get_db_session()
+    try:
+        indexer = StorageIndexer(session, str(config.data_dir))
+
+        success = indexer.delete_journal_entry(entry_id)
+        if not success:
+            console.print(f"[red]Error: Entry #{entry_id} not found[/red]")
+            return
+
+        console.print(f"[green]✓[/green] Entry #{entry_id} deleted")
+    finally:
+        session.close()
+
+
+@journal.command("search")
+@click.argument("query")
+@click.option("--type", "content_type", help="Filter: journal_entry, note, work_log_entry")
+def journal_search(query, content_type):
+    """Search across all content (journal, notes, work logs)."""
+    from .db.operations import FTSOps
+    session, engine = get_db_session()
+    try:
+        results = FTSOps.search(session, query, content_type)
+
+        if not results:
+            console.print(f"[yellow]No results found for '{query}'[/yellow]")
+            return
+
+        console.print(f"\n[bold]Found {len(results)} result(s) for '{query}':[/bold]\n")
+
+        for r in results:
+            type_label = r["content_type"].replace("_", " ").title()
+            console.print(f"[cyan][{type_label}][/cyan] (ID: {r['content_id']})")
+            console.print(f"  {r['snippet']}")
+            if r["tags"]:
+                console.print(f"  Tags: {r['tags']}")
+            console.print()
+    finally:
+        session.close()
+
+
+@journal.command("stats")
+@click.option("--days", type=int, default=30, help="Number of days to analyze")
+def journal_stats(days):
+    """Show journal statistics."""
+    from .db.operations import JournalOps
+    from collections import Counter
+    session, engine = get_db_session()
+    try:
+        end_date = datetime.now()
+        start_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        start_date = start_date.replace(day=1) if days >= 30 else datetime(
+            end_date.year, end_date.month, end_date.day
+        )
+        from datetime import timedelta
+        start_date = end_date - timedelta(days=days)
+
+        journals = JournalOps.list_by_date_range(session, start_date, end_date)
+
+        if not journals:
+            console.print(f"[yellow]No journals found in the last {days} days[/yellow]")
+            return
+
+        total_entries = 0
+        tag_counter = Counter()
+        project_counter = Counter()
+
+        for j in journals:
+            entries = j.entries if j.entries else []
+            total_entries += len(entries)
+            if j.tags:
+                for tag in j.tags.split(","):
+                    tag_counter[tag.strip()] += 1
+            for entry in entries:
+                if entry.tags:
+                    for tag in entry.tags.split(","):
+                        tag_counter[tag.strip()] += 1
+                if entry.project:
+                    project_counter[entry.project.name] += 1
+
+        console.print(f"\n[bold]Journal Stats (last {days} days)[/bold]\n")
+        console.print(f"  Days with journals: {len(journals)}")
+        console.print(f"  Total entries: {total_entries}")
+        if total_entries > 0 and len(journals) > 0:
+            console.print(f"  Avg entries/day: {total_entries / len(journals):.1f}")
+
+        if tag_counter:
+            console.print(f"\n[bold]Top Tags[/bold]")
+            for tag, count in tag_counter.most_common(10):
+                console.print(f"  {tag}: {count}")
+
+        if project_counter:
+            console.print(f"\n[bold]Project Breakdown[/bold]")
+            for project_name, count in project_counter.most_common(10):
+                console.print(f"  {project_name}: {count} entries")
+
+        console.print()
+    finally:
+        session.close()
+
+
 def main():
     """Main CLI entry point."""
     cli()

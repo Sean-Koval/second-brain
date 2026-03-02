@@ -138,6 +138,47 @@ class Note(Base):
     task: Mapped[Optional["Task"]] = relationship("Task", back_populates="notes")
 
 
+class Journal(Base):
+    """Daily journal for freeform thoughts and notes."""
+
+    __tablename__ = "journals"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    date: Mapped[datetime] = mapped_column(DateTime, unique=True, nullable=False, index=True)
+    markdown_path: Mapped[str] = mapped_column(String(500), nullable=False)
+    title: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    body: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # Freeform scratchpad
+    summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # End-of-day summary
+    tags: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # Comma-separated
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    # Relationships
+    entries: Mapped[list["JournalEntry"]] = relationship("JournalEntry", back_populates="journal")
+
+
+class JournalEntry(Base):
+    """Individual entry within a daily journal."""
+
+    __tablename__ = "journal_entries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    journal_id: Mapped[int] = mapped_column(ForeignKey("journals.id"), nullable=False)
+    entry_text: Mapped[str] = mapped_column(Text, nullable=False)
+    tags: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # Comma-separated
+    project_id: Mapped[Optional[int]] = mapped_column(ForeignKey("projects.id"), nullable=True)
+    task_id: Mapped[Optional[int]] = mapped_column(ForeignKey("tasks.id"), nullable=True)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    journal: Mapped["Journal"] = relationship("Journal", back_populates="entries")
+    project: Mapped[Optional["Project"]] = relationship("Project")
+    task: Mapped[Optional["Task"]] = relationship("Task")
+
+
 class Transcript(Base):
     """Call/meeting transcript."""
 
@@ -172,12 +213,29 @@ Index("idx_note_project", Note.project_id)
 Index("idx_note_task", Note.task_id)
 Index("idx_worklog_date", WorkLog.date)
 Index("idx_transcript_date", Transcript.transcript_date)
+Index("idx_journal_date", Journal.date)
+Index("idx_journal_entry_journal", JournalEntry.journal_id)
+Index("idx_journal_entry_project", JournalEntry.project_id)
 
 
 def init_db(db_path: str = "data/index.db") -> None:
     """Initialize the database with all tables."""
     engine = create_engine(f"sqlite:///{db_path}", echo=False)
     Base.metadata.create_all(engine)
+
+    # Create FTS5 virtual table for unified full-text search
+    from sqlalchemy import text
+    with engine.connect() as conn:
+        conn.execute(text("""
+            CREATE VIRTUAL TABLE IF NOT EXISTS content_fts USING fts5(
+                content_type,
+                content_id,
+                content,
+                tags
+            )
+        """))
+        conn.commit()
+
     return engine
 
 

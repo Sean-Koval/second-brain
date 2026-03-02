@@ -43,6 +43,15 @@ from .tools.notes import (
     get_note_tool,
     search_notes_tool,
 )
+from .tools.journal import (
+    create_journal_entry_tool,
+    update_journal_tool,
+    get_journal_tool,
+    get_journals_tool,
+    update_journal_entry_tool,
+    delete_journal_entry_tool,
+    search_all_content_tool,
+)
 
 # Initialize MCP server
 mcp = FastMCP("second-brain")
@@ -544,6 +553,168 @@ async def search_notes(query: str) -> str:
 
     input_data = NoteSearchInput(query=query)
     tool_func = search_notes_tool(engine)
+    return await tool_func(input_data)
+
+
+# Register journal tools
+@mcp.tool()
+async def create_journal_entry(
+    entry_text: str,
+    tags: list[str] | None = None,
+    project_slug: str | None = None,
+    task_id: int | None = None,
+    date: str | None = None,
+) -> str:
+    """
+    Add a quick capture entry to the daily journal.
+
+    The primary tool for capturing thoughts, decisions, ideas, and commentary
+    throughout the day. Entries can be tagged and linked to projects or tasks.
+
+    Args:
+        entry_text: The journal entry text
+        tags: Optional tags for this entry
+        project_slug: Optional project slug to link to
+        task_id: Optional task ID to link to
+        date: Date override (YYYY-MM-DD), defaults to today
+    """
+    from .tools.journal import JournalEntryCreateInput
+
+    input_data = JournalEntryCreateInput(
+        entry_text=entry_text,
+        tags=tags,
+        project_slug=project_slug,
+        task_id=task_id,
+        date=date,
+    )
+    tool_func = create_journal_entry_tool(engine)
+    return await tool_func(input_data)
+
+
+@mcp.tool()
+async def update_journal(
+    date: str | None = None,
+    title: str | None = None,
+    body: str | None = None,
+    summary: str | None = None,
+    tags: list[str] | None = None,
+) -> str:
+    """
+    Update the daily journal's metadata — title, scratchpad body, summary, or tags.
+
+    Args:
+        date: Date (YYYY-MM-DD), defaults to today
+        title: Daily title
+        body: Scratchpad body text
+        summary: End-of-day summary
+        tags: Tags for the day
+    """
+    from .tools.journal import JournalUpdateInput
+
+    input_data = JournalUpdateInput(
+        date=date, title=title, body=body, summary=summary, tags=tags,
+    )
+    tool_func = update_journal_tool(engine)
+    return await tool_func(input_data)
+
+
+@mcp.tool()
+async def get_journal(date: str | None = None) -> str:
+    """
+    View a single day's journal with all entries.
+
+    Args:
+        date: Date (YYYY-MM-DD), defaults to today
+    """
+    from .tools.journal import JournalQueryInput
+
+    input_data = JournalQueryInput(date=date)
+    tool_func = get_journal_tool(engine)
+    return await tool_func(input_data)
+
+
+@mcp.tool()
+async def get_journals(
+    start_date: str | None = None,
+    end_date: str | None = None,
+    tags: list[str] | None = None,
+    limit: int = 7,
+) -> str:
+    """
+    Query journals across a date range or by tags.
+
+    Args:
+        start_date: Start date (YYYY-MM-DD)
+        end_date: End date (YYYY-MM-DD)
+        tags: Filter by tags
+        limit: Max journals to return (default 7)
+    """
+    from .tools.journal import JournalsQueryInput
+
+    input_data = JournalsQueryInput(
+        start_date=start_date, end_date=end_date, tags=tags, limit=limit,
+    )
+    tool_func = get_journals_tool(engine)
+    return await tool_func(input_data)
+
+
+@mcp.tool()
+async def update_journal_entry(
+    entry_id: int,
+    entry_text: str | None = None,
+    tags: list[str] | None = None,
+) -> str:
+    """
+    Edit a specific journal entry's text or tags.
+
+    Args:
+        entry_id: Entry ID to update
+        entry_text: New entry text
+        tags: New tags
+    """
+    from .tools.journal import JournalEntryUpdateInput
+
+    input_data = JournalEntryUpdateInput(
+        entry_id=entry_id, entry_text=entry_text, tags=tags,
+    )
+    tool_func = update_journal_entry_tool(engine)
+    return await tool_func(input_data)
+
+
+@mcp.tool()
+async def delete_journal_entry(entry_id: int) -> str:
+    """
+    Remove a journal entry.
+
+    Args:
+        entry_id: Entry ID to delete
+    """
+    from .tools.journal import JournalEntryDeleteInput
+
+    input_data = JournalEntryDeleteInput(entry_id=entry_id)
+    tool_func = delete_journal_entry_tool(engine)
+    return await tool_func(input_data)
+
+
+@mcp.tool()
+async def search_all_content(
+    query: str,
+    content_type: str | None = None,
+) -> str:
+    """
+    Search across all content types using full-text search.
+
+    Searches journal entries, notes, and work log entries. Returns ranked
+    results with snippets.
+
+    Args:
+        query: Search query
+        content_type: Filter by type: journal_entry, note, work_log_entry
+    """
+    from .tools.journal import ContentSearchInput
+
+    input_data = ContentSearchInput(query=query, content_type=content_type)
+    tool_func = search_all_content_tool(engine)
     return await tool_func(input_data)
 
 

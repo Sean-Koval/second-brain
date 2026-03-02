@@ -137,6 +137,11 @@ class Config:
         return self.transcripts_dir / "processed"
 
     @property
+    def journals_dir(self) -> Path:
+        """Get journals directory path."""
+        return self.data_dir / "journals"
+
+    @property
     def db_path(self) -> Path:
         """Get database file path."""
         return self.data_dir / "index.db"
@@ -148,6 +153,7 @@ class Config:
         self.work_logs_dir.mkdir(parents=True, exist_ok=True)
         self.transcripts_raw_dir.mkdir(parents=True, exist_ok=True)
         self.transcripts_processed_dir.mkdir(parents=True, exist_ok=True)
+        self.journals_dir.mkdir(parents=True, exist_ok=True)
 
     def get_jira_config(self) -> dict:
         """Get Jira configuration from user config or environment.

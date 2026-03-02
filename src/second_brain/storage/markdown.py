@@ -17,12 +17,14 @@ class MarkdownStorage:
         self.work_logs_path = self.base_path / "work_logs"
         self.notes_path = self.base_path / "notes"
         self.transcripts_path = self.base_path / "transcripts"
+        self.journals_path = self.base_path / "journals"
 
         # Ensure directories exist
         self.projects_path.mkdir(parents=True, exist_ok=True)
         self.work_logs_path.mkdir(parents=True, exist_ok=True)
         self.notes_path.mkdir(parents=True, exist_ok=True)
         self.transcripts_path.mkdir(parents=True, exist_ok=True)
+        self.journals_path.mkdir(parents=True, exist_ok=True)
 
     def slugify(self, text: str) -> str:
         """Convert text to slug format."""
@@ -436,3 +438,184 @@ See raw file: `{raw_filepath.name}`
             f.write(frontmatter.dumps(post))
 
         return True
+
+    # Journal operations
+    def create_journal_file(
+        self,
+        date: datetime,
+        title: Optional[str] = None,
+        body: Optional[str] = None,
+        tags: Optional[list] = None,
+    ) -> str:
+        """Create a journal markdown file for a specific date."""
+        date_str = date.strftime("%Y-%m-%d")
+        filepath = self.journals_path / f"{date_str}.md"
+
+        metadata = {
+            "date": date_str,
+            "created_at": datetime.utcnow().isoformat(),
+        }
+        if title:
+            metadata["title"] = title
+        if tags:
+            metadata["tags"] = tags
+
+        title_line = f"\n{title}" if title else ""
+        body_text = body or ""
+
+        content = f"""# Journal - {date_str}
+{title_line}
+
+## Scratchpad
+
+{body_text}
+
+## Entries
+
+<!-- Journal entries will be listed here -->
+"""
+
+        post = frontmatter.Post(content, **metadata)
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(frontmatter.dumps(post))
+
+        return str(filepath)
+
+    def read_journal_file(self, date: datetime) -> Optional[Dict[str, Any]]:
+        """Read a journal markdown file."""
+        date_str = date.strftime("%Y-%m-%d")
+        filepath = self.journals_path / f"{date_str}.md"
+
+        if not filepath.exists():
+            return None
+
+        with open(filepath, "r", encoding="utf-8") as f:
+            post = frontmatter.load(f)
+
+        return {
+            "metadata": post.metadata,
+            "content": post.content,
+            "filepath": str(filepath),
+        }
+
+    def append_journal_entry(
+        self,
+        date: datetime,
+        entry_text: str,
+        timestamp: Optional[datetime] = None,
+        tags: Optional[list] = None,
+        project_name: Optional[str] = None,
+    ) -> bool:
+        """Append an entry to a journal markdown file."""
+        date_str = date.strftime("%Y-%m-%d")
+        filepath = self.journals_path / f"{date_str}.md"
+
+        if not filepath.exists():
+            self.create_journal_file(date)
+
+        with open(filepath, "r", encoding="utf-8") as f:
+            post = frontmatter.load(f)
+
+        ts = timestamp or datetime.now()
+        time_str = ts.strftime("%H:%M")
+        tag_str = " " + " ".join(f"#{t.strip()}" for t in tags) if tags else ""
+        project_line = f"\n**Project: {project_name}**" if project_name else ""
+
+        new_entry = f"\n### {time_str}{tag_str}{project_line}\n{entry_text}\n"
+
+        # Find "## Entries" section and append
+        content_lines = post.content.split("\n")
+        entries_idx = -1
+        for i, line in enumerate(content_lines):
+            if line.strip() == "## Entries":
+                entries_idx = i
+                break
+
+        if entries_idx >= 0:
+            # Insert after the "## Entries" header and any comments
+            insert_idx = entries_idx + 1
+            while insert_idx < len(content_lines) and content_lines[insert_idx].strip().startswith("<!--"):
+                insert_idx += 1
+            content_lines.insert(insert_idx + 1, new_entry)
+        else:
+            content_lines.append(new_entry)
+
+        post.content = "\n".join(content_lines)
+        post.metadata["updated_at"] = datetime.utcnow().isoformat()
+
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(frontmatter.dumps(post))
+
+        return True
+
+    def update_journal_file(
+        self, date: datetime, metadata: Dict[str, Any], content: str
+    ) -> bool:
+        """Update a journal markdown file."""
+        date_str = date.strftime("%Y-%m-%d")
+        filepath = self.journals_path / f"{date_str}.md"
+        if not filepath.exists():
+            return False
+
+        metadata["updated_at"] = datetime.utcnow().isoformat()
+        post = frontmatter.Post(content, **metadata)
+
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(frontmatter.dumps(post))
+
+        return True
+
+    def rebuild_journal_file(
+        self,
+        date: datetime,
+        title: Optional[str] = None,
+        body: Optional[str] = None,
+        summary: Optional[str] = None,
+        tags: Optional[list] = None,
+        entries: Optional[list] = None,
+    ) -> str:
+        """Rebuild a journal markdown file from database state."""
+        date_str = date.strftime("%Y-%m-%d")
+        filepath = self.journals_path / f"{date_str}.md"
+
+        metadata = {
+            "date": date_str,
+            "updated_at": datetime.utcnow().isoformat(),
+        }
+        if title:
+            metadata["title"] = title
+        if tags:
+            metadata["tags"] = tags
+        if summary:
+            metadata["summary"] = summary
+
+        title_line = f"\n{title}" if title else ""
+        body_text = body or ""
+        summary_section = f"\n## Summary\n\n{summary}\n" if summary else ""
+
+        entries_text = ""
+        if entries:
+            for entry in entries:
+                ts = entry.get("timestamp", datetime.now())
+                time_str = ts.strftime("%H:%M") if isinstance(ts, datetime) else str(ts)
+                entry_tags = entry.get("tags", "")
+                tag_str = " " + " ".join(f"#{t.strip()}" for t in entry_tags.split(",") if t.strip()) if entry_tags else ""
+                project_name = entry.get("project_name")
+                project_line = f"\n**Project: {project_name}**" if project_name else ""
+                entries_text += f"\n### {time_str}{tag_str}{project_line}\n{entry.get('text', '')}\n"
+
+        content = f"""# Journal - {date_str}
+{title_line}
+
+## Scratchpad
+
+{body_text}
+{summary_section}
+## Entries
+{entries_text}"""
+
+        post = frontmatter.Post(content, **metadata)
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(frontmatter.dumps(post))
+
+        return str(filepath)

@@ -5,8 +5,8 @@ from pathlib import Path
 from typing import Optional, List
 from sqlalchemy.orm import Session
 
-from ..db import Project, Task, WorkLog, Note, Transcript
-from ..db.operations import ProjectOps, WorkLogOps, NoteOps, TranscriptOps
+from ..db import Project, Task, WorkLog, Note, Transcript, Journal, JournalEntry
+from ..db.operations import ProjectOps, WorkLogOps, NoteOps, TranscriptOps, JournalOps, FTSOps
 from .markdown import MarkdownStorage
 
 
@@ -361,3 +361,195 @@ class StorageIndexer:
     def search_notes(self, query_text: str) -> List[Note]:
         """Search notes by title or content."""
         return NoteOps.search(self.session, query_text)
+
+    # Journal operations
+
+    def add_journal_entry(
+        self,
+        date: datetime,
+        entry_text: str,
+        tags: Optional[List[str]] = None,
+        project_id: Optional[int] = None,
+        task_id: Optional[int] = None,
+    ) -> tuple[Journal, JournalEntry]:
+        """Add an entry to a journal (markdown and database)."""
+        date_str = date.strftime("%Y-%m-%d")
+        filepath = str(self.storage.journals_path / f"{date_str}.md")
+        journal = JournalOps.get_or_create(self.session, date, filepath)
+
+        tags_str = ",".join(tags) if tags else None
+
+        # Get project name for markdown
+        project_name = None
+        if project_id:
+            project = self.session.get(Project, project_id)
+            if project:
+                project_name = project.name
+
+        # Add to markdown
+        self.storage.append_journal_entry(
+            date, entry_text, tags=tags, project_name=project_name,
+        )
+
+        # Add to database
+        entry = JournalOps.add_entry(
+            self.session, journal, entry_text,
+            tags=tags_str, project_id=project_id, task_id=task_id,
+        )
+
+        # Add to FTS5 index
+        FTSOps.insert(self.session, "journal_entry", entry.id, entry_text, tags_str or "")
+
+        return journal, entry
+
+    def update_journal(
+        self,
+        date: datetime,
+        title: Optional[str] = None,
+        body: Optional[str] = None,
+        summary: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+    ) -> Optional[Journal]:
+        """Update journal day-level metadata."""
+        date_str = date.strftime("%Y-%m-%d")
+        filepath = str(self.storage.journals_path / f"{date_str}.md")
+        journal = JournalOps.get_or_create(self.session, date, filepath)
+
+        updates = {}
+        if title is not None:
+            updates["title"] = title
+        if body is not None:
+            updates["body"] = body
+        if summary is not None:
+            updates["summary"] = summary
+        if tags is not None:
+            updates["tags"] = ",".join(tags)
+
+        if updates:
+            JournalOps.update(self.session, journal, **updates)
+
+        # Rebuild markdown file from database state
+        entries_data = []
+        for entry in journal.entries:
+            project_name = None
+            if entry.project_id:
+                project = self.session.get(Project, entry.project_id)
+                if project:
+                    project_name = project.name
+            entries_data.append({
+                "timestamp": entry.timestamp,
+                "text": entry.entry_text,
+                "tags": entry.tags or "",
+                "project_name": project_name,
+            })
+
+        self.storage.rebuild_journal_file(
+            date,
+            title=journal.title,
+            body=journal.body,
+            summary=journal.summary,
+            tags=journal.tags.split(",") if journal.tags else None,
+            entries=entries_data,
+        )
+
+        return journal
+
+    def get_journal(self, date: datetime) -> Optional[Journal]:
+        """Get journal for a specific date."""
+        return JournalOps.get_by_date(self.session, date)
+
+    def get_journals(
+        self,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+        tags: Optional[List[str]] = None,
+        limit: int = 7,
+    ) -> List[Journal]:
+        """Get journals with optional filters."""
+        if start_date and end_date:
+            journals = JournalOps.list_by_date_range(self.session, start_date, end_date)
+        elif tags:
+            journals = JournalOps.list_by_tags(self.session, tags)
+        else:
+            journals = JournalOps.list_recent(self.session, limit)
+        return journals
+
+    def update_journal_entry(
+        self,
+        entry_id: int,
+        entry_text: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+    ) -> Optional[JournalEntry]:
+        """Update a journal entry."""
+        entry = JournalOps.get_entry_by_id(self.session, entry_id)
+        if not entry:
+            return None
+
+        updates = {}
+        if entry_text is not None:
+            updates["entry_text"] = entry_text
+        if tags is not None:
+            updates["tags"] = ",".join(tags)
+
+        if updates:
+            JournalOps.update_entry(self.session, entry, **updates)
+
+        # Update FTS5
+        FTSOps.update(
+            self.session, "journal_entry", entry.id,
+            entry.entry_text, entry.tags or "",
+        )
+
+        # Rebuild markdown
+        journal = self.session.get(Journal, entry.journal_id)
+        if journal:
+            self._rebuild_journal_markdown(journal)
+
+        return entry
+
+    def delete_journal_entry(self, entry_id: int) -> bool:
+        """Delete a journal entry."""
+        entry = JournalOps.get_entry_by_id(self.session, entry_id)
+        if not entry:
+            return False
+
+        journal_id = entry.journal_id
+        FTSOps.delete(self.session, "journal_entry", entry.id)
+        JournalOps.delete_entry(self.session, entry)
+
+        # Rebuild markdown
+        journal = self.session.get(Journal, journal_id)
+        if journal:
+            self._rebuild_journal_markdown(journal)
+
+        return True
+
+    def search_all_content(self, query: str, content_type: Optional[str] = None) -> List[dict]:
+        """Search across all content using FTS5."""
+        return FTSOps.search(self.session, query, content_type)
+
+    def _rebuild_journal_markdown(self, journal: Journal) -> None:
+        """Rebuild journal markdown from database state."""
+        self.session.refresh(journal)
+        entries_data = []
+        for entry in journal.entries:
+            project_name = None
+            if entry.project_id:
+                project = self.session.get(Project, entry.project_id)
+                if project:
+                    project_name = project.name
+            entries_data.append({
+                "timestamp": entry.timestamp,
+                "text": entry.entry_text,
+                "tags": entry.tags or "",
+                "project_name": project_name,
+            })
+
+        self.storage.rebuild_journal_file(
+            journal.date,
+            title=journal.title,
+            body=journal.body,
+            summary=journal.summary,
+            tags=journal.tags.split(",") if journal.tags else None,
+            entries=entries_data,
+        )

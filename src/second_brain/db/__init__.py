@@ -1,7 +1,7 @@
 """Database models and operations."""
 
-from .models import init_db, get_session, Project, Task, WorkLog, WorkLogEntry, Note, Transcript
-from .operations import ProjectOps, TaskOps, WorkLogOps, NoteOps, TranscriptOps
+from .models import init_db, get_session, Project, Task, WorkLog, WorkLogEntry, Note, Transcript, Journal, JournalEntry
+from .operations import ProjectOps, TaskOps, WorkLogOps, NoteOps, TranscriptOps, JournalOps, FTSOps
 
 __all__ = [
     "init_db",
@@ -12,9 +12,13 @@ __all__ = [
     "WorkLogEntry",
     "Note",
     "Transcript",
+    "Journal",
+    "JournalEntry",
     "ProjectOps",
     "TaskOps",
     "WorkLogOps",
     "NoteOps",
     "TranscriptOps",
+    "JournalOps",
+    "FTSOps",
 ]
